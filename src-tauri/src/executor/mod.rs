@@ -4,6 +4,8 @@ use std::path::Path;
 use std::fs;
 use regex::Regex;
 
+use crate::toolchain::ToolchainManager;
+
 /// 代码执行结果
 #[derive(Debug, serde::Serialize)]
 pub struct ExecResult {
@@ -13,13 +15,18 @@ pub struct ExecResult {
 }
 
 /// 零配置执行引擎
-/// 自动检测工具链位置，编译并运行用户代码
-pub fn execute_code(code: &str, language: &str, work_dir: &Path) -> ExecResult {
+/// 通过 ToolchainManager 获取编译器路径（便携版优先，回退系统 PATH）
+pub fn execute_code(
+    code: &str,
+    language: &str,
+    work_dir: &Path,
+    toolchain: &ToolchainManager,
+) -> ExecResult {
     match language {
-        "c" => execute_c(code, work_dir),
-        "cpp" => execute_cpp(code, work_dir),
-        "java" => execute_java(code, work_dir),
-        "python" => execute_python(code, work_dir),
+        "c" => execute_c(code, work_dir, toolchain),
+        "cpp" => execute_cpp(code, work_dir, toolchain),
+        "java" => execute_java(code, work_dir, toolchain),
+        "python" => execute_python(code, work_dir, toolchain),
         _ => ExecResult {
             stdout: String::new(),
             stderr: format!("不支持的语言: {}", language),
@@ -28,14 +35,14 @@ pub fn execute_code(code: &str, language: &str, work_dir: &Path) -> ExecResult {
     }
 }
 
-fn execute_c(code: &str, work_dir: &Path) -> ExecResult {
+fn execute_c(code: &str, work_dir: &Path, tc: &ToolchainManager) -> ExecResult {
     let src_path = work_dir.join("main.c");
     let out_path = work_dir.join(if cfg!(windows) { "main.exe" } else { "main" });
 
     fs::write(&src_path, code).unwrap_or_default();
 
-    // 编译
-    let compile = run_command("gcc", &[
+    let gcc = tc.gcc();
+    let compile = run_command(&gcc, &[
         src_path.to_str().unwrap(),
         "-o", out_path.to_str().unwrap(),
         "-Wall",
@@ -45,17 +52,17 @@ fn execute_c(code: &str, work_dir: &Path) -> ExecResult {
         return compile;
     }
 
-    // 运行
     run_command(out_path.to_str().unwrap(), &[])
 }
 
-fn execute_cpp(code: &str, work_dir: &Path) -> ExecResult {
+fn execute_cpp(code: &str, work_dir: &Path, tc: &ToolchainManager) -> ExecResult {
     let src_path = work_dir.join("main.cpp");
     let out_path = work_dir.join(if cfg!(windows) { "main.exe" } else { "main" });
 
     fs::write(&src_path, code).unwrap_or_default();
 
-    let compile = run_command("g++", &[
+    let gpp = tc.gpp();
+    let compile = run_command(&gpp, &[
         src_path.to_str().unwrap(),
         "-o", out_path.to_str().unwrap(),
         "-Wall", "-std=c++17",
@@ -68,15 +75,14 @@ fn execute_cpp(code: &str, work_dir: &Path) -> ExecResult {
     run_command(out_path.to_str().unwrap(), &[])
 }
 
-fn execute_java(code: &str, work_dir: &Path) -> ExecResult {
-    // 提取 public class 名
+fn execute_java(code: &str, work_dir: &Path, tc: &ToolchainManager) -> ExecResult {
     let class_name = extract_java_class_name(code).unwrap_or("Main".to_string());
     let src_path = work_dir.join(format!("{}.java", class_name));
 
     fs::write(&src_path, code).unwrap_or_default();
 
-    // 编译
-    let compile = run_command("javac", &[
+    let javac = tc.javac();
+    let compile = run_command(&javac, &[
         src_path.to_str().unwrap(),
     ]);
 
@@ -84,21 +90,19 @@ fn execute_java(code: &str, work_dir: &Path) -> ExecResult {
         return compile;
     }
 
-    // 运行
-    run_command("java", &[
+    let java = tc.java();
+    run_command(&java, &[
         "-cp", work_dir.to_str().unwrap(),
         &class_name,
     ])
 }
 
-fn execute_python(code: &str, work_dir: &Path) -> ExecResult {
+fn execute_python(code: &str, work_dir: &Path, tc: &ToolchainManager) -> ExecResult {
     let src_path = work_dir.join("main.py");
     fs::write(&src_path, code).unwrap_or_default();
 
-    // 尝试 python3，回退到 python
-    let python_cmd = if which_exists("python3") { "python3" } else { "python" };
-
-    run_command(python_cmd, &[src_path.to_str().unwrap()])
+    let python = tc.python();
+    run_command(&python, &[src_path.to_str().unwrap()])
 }
 
 fn run_command(program: &str, args: &[&str]) -> ExecResult {
@@ -110,18 +114,13 @@ fn run_command(program: &str, args: &[&str]) -> ExecResult {
         },
         Err(e) => ExecResult {
             stdout: String::new(),
-            stderr: format!("无法启动 {}：{}。请确认已安装对应的编译器/解释器。", program, e),
+            stderr: format!(
+                "无法启动 {}：{}。\n\n请确认已安装对应的编译器/解释器，或将便携工具链放入 toolchains/ 目录。",
+                program, e
+            ),
             exit_code: 1,
         },
     }
-}
-
-fn which_exists(cmd: &str) -> bool {
-    Command::new("which")
-        .arg(cmd)
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
 }
 
 fn extract_java_class_name(code: &str) -> Option<String> {
@@ -130,8 +129,6 @@ fn extract_java_class_name(code: &str) -> Option<String> {
 }
 
 /// 内存级 Web 打包器 (Zero-Server Bundler)
-/// 读取虚拟文件系统中的 index.html，将外链的 CSS/JS 内联替换，
-/// 输出一个自包含的 HTML 字符串，可直接注入 iframe 渲染
 pub fn bundle_web_project(files: &HashMap<String, String>) -> Result<String, String> {
     let html = files
         .get("index.html")
@@ -143,7 +140,6 @@ pub fn bundle_web_project(files: &HashMap<String, String>) -> Result<String, Str
     let css_re = Regex::new(
         r#"<link\s+[^>]*rel\s*=\s*["']stylesheet["'][^>]*href\s*=\s*["']([^"']+\.css)["'][^>]*/?\s*>"#
     ).unwrap();
-    // 也匹配 href 在 rel 前面的情况
     let css_re2 = Regex::new(
         r#"<link\s+[^>]*href\s*=\s*["']([^"']+\.css)["'][^>]*rel\s*=\s*["']stylesheet["'][^>]*/?\s*>"#
     ).unwrap();

@@ -2,21 +2,24 @@ mod trie;
 mod error_translator;
 mod executor;
 mod vfs;
+mod toolchain;
 
 use std::sync::Mutex;
 use trie::Trie;
 use trie::keywords;
 use error_translator::FriendlyError;
 use vfs::{VirtualFS, VfsFileInfo};
+use toolchain::{ToolchainManager, ToolchainStatus};
 
 /// 全局应用状态
 struct AppState {
     tries: std::collections::HashMap<String, Trie>,
     vfs: VirtualFS,
+    toolchain: ToolchainManager,
 }
 
 impl AppState {
-    fn new() -> Self {
+    fn new(resource_dir: Option<std::path::PathBuf>) -> Self {
         let mut tries = std::collections::HashMap::new();
 
         let mut c_trie = Trie::new();
@@ -47,16 +50,28 @@ impl AppState {
         keywords::load_javascript_keywords(&mut js_trie);
         tries.insert("javascript".to_string(), js_trie);
 
+        // 初始化工具链管理器
+        // app_data_dir: 存放释放出的便携工具链
+        let app_data_dir = dirs::data_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("ZenCode");
+        std::fs::create_dir_all(&app_data_dir).unwrap_or_default();
+
+        let toolchain = ToolchainManager::init(
+            resource_dir.as_deref(),
+            &app_data_dir,
+        );
+
         AppState {
             tries,
             vfs: VirtualFS::new(),
+            toolchain,
         }
     }
 }
 
 // ============ Trie 补全 IPC ============
 
-/// 前缀补全查询 —— 支持 scope 参数用于 HTML 混合文件上下文嗅探
 #[tauri::command]
 fn autocomplete(
     prefix: &str,
@@ -73,11 +88,12 @@ fn autocomplete(
 // ============ 代码执行 IPC ============
 
 #[tauri::command]
-fn run_code(code: &str, language: &str) -> serde_json::Value {
+fn run_code(code: &str, language: &str, state: tauri::State<'_, Mutex<AppState>>) -> serde_json::Value {
     let temp_dir = std::env::temp_dir().join("zencode_workspace");
     std::fs::create_dir_all(&temp_dir).unwrap_or_default();
 
-    let result = executor::execute_code(code, language, &temp_dir);
+    let state = state.lock().unwrap();
+    let result = executor::execute_code(code, language, &temp_dir, &state.toolchain);
 
     let friendly_errors: Vec<FriendlyError> = if !result.stderr.is_empty() {
         error_translator::translate_error(&result.stderr, language)
@@ -144,12 +160,18 @@ fn vfs_create_web_project(state: tauri::State<'_, Mutex<AppState>>) -> Vec<VfsFi
 
 // ============ Web 打包器 IPC ============
 
-/// 将虚拟文件系统中的 Web 项目打包成单个 HTML 字符串
-/// 前端先调用 vfs_write_file 保存所有文件，再调用此命令获取打包结果
 #[tauri::command]
 fn bundle_web(state: tauri::State<'_, Mutex<AppState>>) -> Result<String, String> {
     let state = state.lock().unwrap();
     executor::bundle_web_project(state.vfs.all_files())
+}
+
+// ============ 工具链状态 IPC ============
+
+#[tauri::command]
+fn toolchain_status(state: tauri::State<'_, Mutex<AppState>>) -> Vec<ToolchainStatus> {
+    let state = state.lock().unwrap();
+    state.toolchain.status()
 }
 
 // ============ 启动 ============
@@ -158,7 +180,13 @@ fn bundle_web(state: tauri::State<'_, Mutex<AppState>>) -> Result<String, String
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(Mutex::new(AppState::new()))
+        .setup(|app| {
+            // 获取 Tauri resource 目录（打包后才有值）
+            let resource_dir = app.path().resource_dir().ok();
+            let state = AppState::new(resource_dir);
+            app.manage(Mutex::new(state));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             autocomplete,
             run_code,
@@ -170,6 +198,7 @@ pub fn run() {
             vfs_set_active,
             vfs_create_web_project,
             bundle_web,
+            toolchain_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
