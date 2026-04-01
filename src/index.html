@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZenCode -  By HowieSun</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- 顶部工具栏 -->
+  <header class="toolbar">
+    <div class="toolbar-left">
+      <span class="logo">ZenCode</span>
+      <select id="language-select">
+        <option value="c">C</option>
+        <option value="cpp">C++</option>
+        <option value="java">Java</option>
+        <option value="python" selected>Python</option>
+        <option value="html">HTML</option>
+        <option value="css">CSS</option>
+        <option value="javascript">JavaScript</option>
+      </select>
+    </div>
+    <div class="toolbar-right">
+      <button id="run-btn" title="运行代码 (Ctrl+Enter)">&#9654; 运行</button>
+    </div>
+  </header>
+
+  <!-- 主体区域 -->
+  <main class="workspace">
+    <!-- 编辑器区域 -->
+    <div class="editor-pane">
+      <textarea id="editor" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
+        placeholder="在这里写代码..."></textarea>
+      <!-- 补全弹出框 -->
+      <div id="autocomplete-popup" class="autocomplete-popup hidden"></div>
+    </div>
+
+    <!-- 输出面板 -->
+    <div class="output-pane">
+      <div class="output-header">
+        <span>输出</span>
+        <button id="clear-output" title="清空输出">&#10005;</button>
+      </div>
+      <pre id="output-content"></pre>
+    </div>
+  </main>
+
+  <!-- Web 前端预览 iframe（仅 HTML/CSS/JS 使用）-->
+  <iframe id="web-preview" class="hidden" sandbox="allow-scripts"></iframe>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
