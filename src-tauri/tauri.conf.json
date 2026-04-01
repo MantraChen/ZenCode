@@ -10,7 +10,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "ZenCode - 极简编程",
+        "title": "ZenCode - By HowieSun",
         "width": 1200,
         "height": 800,
         "minWidth": 800,
@@ -30,6 +30,9 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
+    ],
+    "resources": [
+      "toolchains/**/*"
     ]
   }
 }

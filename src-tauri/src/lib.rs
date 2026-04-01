@@ -1,3 +1,5 @@
+use tauri::Manager;
+
 mod trie;
 mod error_translator;
 mod executor;

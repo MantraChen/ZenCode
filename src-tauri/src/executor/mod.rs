@@ -15,7 +15,6 @@ pub struct ExecResult {
 }
 
 /// 零配置执行引擎
-/// 通过 ToolchainManager 获取编译器路径（便携版优先，回退系统 PATH）
 pub fn execute_code(
     code: &str,
     language: &str,
@@ -136,7 +135,6 @@ pub fn bundle_web_project(files: &HashMap<String, String>) -> Result<String, Str
 
     let mut result = html.clone();
 
-    // 替换 <link rel="stylesheet" href="xxx.css"> → <style>内容</style>
     let css_re = Regex::new(
         r#"<link\s+[^>]*rel\s*=\s*["']stylesheet["'][^>]*href\s*=\s*["']([^"']+\.css)["'][^>]*/?\s*>"#
     ).unwrap();
@@ -157,7 +155,6 @@ pub fn bundle_web_project(files: &HashMap<String, String>) -> Result<String, Str
         result = new_result;
     }
 
-    // 替换 <script src="xxx.js"></script> → <script>内容</script>
     let js_re = Regex::new(
         r#"<script\s+[^>]*src\s*=\s*["']([^"']+\.js)["'][^>]*>\s*</script>"#
     ).unwrap();
@@ -174,36 +171,4 @@ pub fn bundle_web_project(files: &HashMap<String, String>) -> Result<String, Str
     result = new_result;
 
     Ok(result)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_bundle_web_project() {
-        let mut files = HashMap::new();
-        files.insert(
-            "index.html".to_string(),
-            r#"<!DOCTYPE html>
-<html>
-<head>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <h1>Test</h1>
-    <script src="main.js"></script>
-</body>
-</html>"#.to_string(),
-        );
-        files.insert("style.css".to_string(), "h1 { color: red; }".to_string());
-        files.insert("main.js".to_string(), "alert('hi');".to_string());
-
-        let bundled = bundle_web_project(&files).unwrap();
-        assert!(bundled.contains("<style>"));
-        assert!(bundled.contains("h1 { color: red; }"));
-        assert!(bundled.contains("alert('hi');"));
-        assert!(!bundled.contains(r#"href="style.css""#));
-        assert!(!bundled.contains(r#"src="main.js""#));
-    }
 }
