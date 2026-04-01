@@ -1,6 +1,8 @@
+use std::collections::HashMap;
 use std::process::Command;
 use std::path::Path;
 use std::fs;
+use regex::Regex;
 
 /// 代码执行结果
 #[derive(Debug, serde::Serialize)]
@@ -125,4 +127,87 @@ fn which_exists(cmd: &str) -> bool {
 fn extract_java_class_name(code: &str) -> Option<String> {
     let re = regex::Regex::new(r"public\s+class\s+(\w+)").ok()?;
     re.captures(code).map(|c| c[1].to_string())
+}
+
+/// 内存级 Web 打包器 (Zero-Server Bundler)
+/// 读取虚拟文件系统中的 index.html，将外链的 CSS/JS 内联替换，
+/// 输出一个自包含的 HTML 字符串，可直接注入 iframe 渲染
+pub fn bundle_web_project(files: &HashMap<String, String>) -> Result<String, String> {
+    let html = files
+        .get("index.html")
+        .ok_or_else(|| "虚拟项目中缺少 index.html 文件".to_string())?;
+
+    let mut result = html.clone();
+
+    // 替换 <link rel="stylesheet" href="xxx.css"> → <style>内容</style>
+    let css_re = Regex::new(
+        r#"<link\s+[^>]*rel\s*=\s*["']stylesheet["'][^>]*href\s*=\s*["']([^"']+\.css)["'][^>]*/?\s*>"#
+    ).unwrap();
+    // 也匹配 href 在 rel 前面的情况
+    let css_re2 = Regex::new(
+        r#"<link\s+[^>]*href\s*=\s*["']([^"']+\.css)["'][^>]*rel\s*=\s*["']stylesheet["'][^>]*/?\s*>"#
+    ).unwrap();
+
+    for re in &[&css_re, &css_re2] {
+        let mut new_result = result.clone();
+        for caps in re.captures_iter(&result) {
+            let full_match = &caps[0];
+            let css_filename = &caps[1];
+            if let Some(css_content) = files.get(css_filename) {
+                let inline = format!("<style>\n{}\n</style>", css_content);
+                new_result = new_result.replace(full_match, &inline);
+            }
+        }
+        result = new_result;
+    }
+
+    // 替换 <script src="xxx.js"></script> → <script>内容</script>
+    let js_re = Regex::new(
+        r#"<script\s+[^>]*src\s*=\s*["']([^"']+\.js)["'][^>]*>\s*</script>"#
+    ).unwrap();
+
+    let mut new_result = result.clone();
+    for caps in js_re.captures_iter(&result) {
+        let full_match = &caps[0];
+        let js_filename = &caps[1];
+        if let Some(js_content) = files.get(js_filename) {
+            let inline = format!("<script>\n{}\n</script>", js_content);
+            new_result = new_result.replace(full_match, &inline);
+        }
+    }
+    result = new_result;
+
+    Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bundle_web_project() {
+        let mut files = HashMap::new();
+        files.insert(
+            "index.html".to_string(),
+            r#"<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>Test</h1>
+    <script src="main.js"></script>
+</body>
+</html>"#.to_string(),
+        );
+        files.insert("style.css".to_string(), "h1 { color: red; }".to_string());
+        files.insert("main.js".to_string(), "alert('hi');".to_string());
+
+        let bundled = bundle_web_project(&files).unwrap();
+        assert!(bundled.contains("<style>"));
+        assert!(bundled.contains("h1 { color: red; }"));
+        assert!(bundled.contains("alert('hi');"));
+        assert!(!bundled.contains(r#"href="style.css""#));
+        assert!(!bundled.contains(r#"src="main.js""#));
+    }
 }

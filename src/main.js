@@ -8,11 +8,20 @@ const outputContent = document.getElementById("output-content");
 const clearOutputBtn = document.getElementById("clear-output");
 const autocompletePopup = document.getElementById("autocomplete-popup");
 const webPreview = document.getElementById("web-preview");
+const sidebar = document.getElementById("sidebar");
+const fileTree = document.getElementById("file-tree");
+const tabBar = document.getElementById("tab-bar");
+const newFileBtn = document.getElementById("new-file-btn");
 
 // ============ 状态 ============
-let selectedIndex = -1; // 补全列表选中索引
-let completionItems = []; // 当前补全项列表
+let selectedIndex = -1;
+let completionItems = [];
 let debounceTimer = null;
+
+// Web 项目模式状态
+let isWebMode = false;
+let openTabs = [];       // 当前打开的 tab 文件名列表
+let activeTab = null;    // 当前活动 tab
 
 // ============ 默认代码模板 ============
 const templates = {
@@ -20,9 +29,6 @@ const templates = {
   cpp: '#include <iostream>\nusing namespace std;\n\nint main() {\n    cout << "Hello, World!" << endl;\n    return 0;\n}',
   java: 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, World!");\n    }\n}',
   python: 'print("Hello, World!")',
-  html: '<!DOCTYPE html>\n<html>\n<head>\n    <title>My Page</title>\n</head>\n<body>\n    <h1>Hello, World!</h1>\n</body>\n</html>',
-  css: 'body {\n    background-color: #f0f0f0;\n    font-family: sans-serif;\n    text-align: center;\n    padding: 50px;\n}\n\nh1 {\n    color: #333;\n}',
-  javascript: 'console.log("Hello, World!");',
 };
 
 // ============ 初始化 ============
@@ -32,18 +38,223 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // ============ 语言切换 ============
-langSelect.addEventListener("change", () => {
+langSelect.addEventListener("change", async () => {
   const lang = langSelect.value;
-  editor.value = templates[lang] || "";
   hideAutocomplete();
   outputContent.innerHTML = "";
+  webPreview.classList.add("hidden");
 
-  // Web 前端语言切换预览显示
-  const isWeb = ["html", "css", "javascript"].includes(lang);
-  if (!isWeb) {
-    webPreview.classList.add("hidden");
+  if (lang === "web") {
+    await enterWebMode();
+  } else {
+    exitWebMode();
+    editor.value = templates[lang] || "";
   }
 });
+
+// ============ Web 项目模式 ============
+async function enterWebMode() {
+  isWebMode = true;
+  sidebar.classList.remove("hidden");
+  tabBar.classList.remove("hidden");
+
+  // 在后端创建 Web 项目模板
+  const files = await invoke("vfs_create_web_project");
+  renderFileTree(files);
+
+  // 打开 index.html
+  openTabs = ["index.html"];
+  activeTab = "index.html";
+  await loadFile("index.html");
+  renderTabs();
+}
+
+function exitWebMode() {
+  isWebMode = false;
+  sidebar.classList.add("hidden");
+  tabBar.classList.add("hidden");
+  webPreview.classList.add("hidden");
+  openTabs = [];
+  activeTab = null;
+  fileTree.innerHTML = "";
+  tabBar.innerHTML = "";
+}
+
+// ============ 文件树渲染 ============
+function getFileIcon(ext) {
+  const icons = {
+    html: "&#9776;",
+    css: "&#9733;",
+    js: "&#9883;",
+    c: "C",
+    cpp: "C+",
+    java: "J",
+    py: "Py",
+  };
+  return icons[ext] || "&#9634;";
+}
+
+function renderFileTree(files) {
+  fileTree.innerHTML = "";
+  for (const file of files) {
+    const div = document.createElement("div");
+    div.className = "file-item" + (file.name === activeTab ? " active" : "");
+    div.innerHTML = `
+      <span class="file-icon">${getFileIcon(file.extension)}</span>
+      <span class="file-name">${file.name}</span>
+      <button class="file-delete" title="删除">&#10005;</button>
+    `;
+
+    div.querySelector(".file-name").addEventListener("click", () => openFile(file.name));
+    div.querySelector(".file-delete").addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteFile(file.name);
+    });
+
+    fileTree.appendChild(div);
+  }
+}
+
+async function refreshFileTree() {
+  const files = await invoke("vfs_list_files");
+  renderFileTree(files);
+}
+
+// ============ 文件操作 ============
+async function openFile(name) {
+  // 先保存当前文件
+  await saveCurrentFile();
+
+  // 加载目标文件
+  await loadFile(name);
+
+  // 更新 tab
+  if (!openTabs.includes(name)) {
+    openTabs.push(name);
+  }
+  activeTab = name;
+  renderTabs();
+  await refreshFileTree();
+}
+
+async function loadFile(name) {
+  const content = await invoke("vfs_read_file", { name });
+  editor.value = content || "";
+  activeTab = name;
+  await invoke("vfs_set_active", { name });
+}
+
+async function saveCurrentFile() {
+  if (activeTab && isWebMode) {
+    await invoke("vfs_write_file", {
+      name: activeTab,
+      content: editor.value,
+    });
+  }
+}
+
+async function deleteFile(name) {
+  if (!confirm(`确定要删除 ${name} 吗？`)) return;
+
+  await invoke("vfs_delete_file", { name });
+
+  // 从 tabs 中移除
+  openTabs = openTabs.filter((t) => t !== name);
+  if (activeTab === name) {
+    activeTab = openTabs[0] || null;
+    if (activeTab) {
+      await loadFile(activeTab);
+    } else {
+      editor.value = "";
+    }
+  }
+
+  renderTabs();
+  await refreshFileTree();
+}
+
+// 新建文件
+newFileBtn.addEventListener("click", () => showNewFileDialog());
+
+function showNewFileDialog() {
+  const overlay = document.createElement("div");
+  overlay.className = "dialog-overlay";
+  overlay.innerHTML = `
+    <div class="dialog">
+      <h3>新建文件</h3>
+      <input type="text" id="new-file-input" placeholder="文件名 (如 app.js)" autofocus />
+      <div class="dialog-buttons">
+        <button id="dialog-cancel">取消</button>
+        <button id="dialog-confirm" class="primary">创建</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const input = overlay.querySelector("#new-file-input");
+  input.focus();
+
+  const close = () => overlay.remove();
+
+  overlay.querySelector("#dialog-cancel").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) close();
+  });
+
+  const confirm = async () => {
+    const name = input.value.trim();
+    if (!name) return;
+    await invoke("vfs_write_file", { name, content: "" });
+    close();
+    await openFile(name);
+    await refreshFileTree();
+  };
+
+  overlay.querySelector("#dialog-confirm").addEventListener("click", confirm);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") confirm();
+    if (e.key === "Escape") close();
+  });
+}
+
+// ============ Tab 栏 ============
+function renderTabs() {
+  tabBar.innerHTML = "";
+  for (const name of openTabs) {
+    const tab = document.createElement("div");
+    tab.className = "tab-item" + (name === activeTab ? " active" : "");
+
+    const label = document.createElement("span");
+    label.textContent = name;
+    label.addEventListener("click", () => openFile(name));
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "tab-close";
+    closeBtn.innerHTML = "&#10005;";
+    closeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      closeTab(name);
+    });
+
+    tab.appendChild(label);
+    tab.appendChild(closeBtn);
+    tabBar.appendChild(tab);
+  }
+}
+
+async function closeTab(name) {
+  await saveCurrentFile();
+  openTabs = openTabs.filter((t) => t !== name);
+  if (activeTab === name) {
+    activeTab = openTabs[openTabs.length - 1] || null;
+    if (activeTab) {
+      await loadFile(activeTab);
+    } else {
+      editor.value = "";
+    }
+  }
+  renderTabs();
+}
 
 // ============ 运行代码 ============
 runBtn.addEventListener("click", runCode);
@@ -56,17 +267,16 @@ document.addEventListener("keydown", (e) => {
 });
 
 async function runCode() {
+  if (isWebMode) {
+    await runWebProject();
+    return;
+  }
+
   const code = editor.value;
   const language = langSelect.value;
 
   if (!code.trim()) {
     outputContent.innerHTML = '<span class="output-error">请先写一些代码再运行。</span>';
-    return;
-  }
-
-  // Web 前端语言：直接在 iframe 中渲染
-  if (language === "html" || language === "css" || language === "javascript") {
-    runWebCode(code, language);
     return;
   }
 
@@ -76,10 +286,8 @@ async function runCode() {
 
   try {
     const result = await invoke("run_code", { code, language });
-
     outputContent.innerHTML = "";
 
-    // 显示友好错误提示
     if (result.errors && result.errors.length > 0) {
       for (const err of result.errors) {
         const span = document.createElement("span");
@@ -89,7 +297,6 @@ async function runCode() {
       }
     }
 
-    // 显示标准输出
     if (result.stdout) {
       const span = document.createElement("span");
       span.className = result.exitCode === 0 ? "output-stdout" : "output-error";
@@ -97,7 +304,6 @@ async function runCode() {
       outputContent.appendChild(span);
     }
 
-    // 运行成功标记
     if (result.exitCode === 0 && !result.errors.length) {
       const span = document.createElement("span");
       span.className = "output-success";
@@ -112,36 +318,116 @@ async function runCode() {
   }
 }
 
-function runWebCode(code, language) {
-  let htmlContent = "";
+// ============ Web 项目运行（内存打包器） ============
+async function runWebProject() {
+  // 先保存当前文件
+  await saveCurrentFile();
 
-  if (language === "html") {
-    htmlContent = code;
-  } else if (language === "css") {
-    htmlContent = `<!DOCTYPE html><html><head><style>${code}</style></head><body><h1>CSS 预览</h1><p>这是一段示例文字。</p><button>按钮</button></body></html>`;
-  } else if (language === "javascript") {
-    htmlContent = `<!DOCTYPE html><html><head></head><body><pre id="out"></pre><script>
-      const _log = console.log;
-      console.log = function(...args) {
-        document.getElementById('out').textContent += args.join(' ') + '\\n';
-        _log.apply(console, args);
-      };
-      try { ${code} } catch(e) { console.log('错误: ' + e.message); }
-    <\/script></body></html>`;
+  try {
+    // 调用 Rust 内存打包器
+    const bundledHtml = await invoke("bundle_web");
+
+    // 使用 Blob URL 安全渲染
+    const blob = new Blob([bundledHtml], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+
+    // 释放旧的 Blob URL
+    if (webPreview.dataset.blobUrl) {
+      URL.revokeObjectURL(webPreview.dataset.blobUrl);
+    }
+    webPreview.dataset.blobUrl = url;
+    webPreview.src = url;
+    webPreview.classList.remove("hidden");
+
+    outputContent.innerHTML = '<span class="output-success">Web 项目已在右侧预览面板中渲染。</span>';
+  } catch (err) {
+    outputContent.innerHTML = `<span class="output-error">打包失败: ${err}</span>`;
   }
-
-  webPreview.classList.remove("hidden");
-  webPreview.srcdoc = htmlContent;
-
-  outputContent.innerHTML = '<span class="output-success">已在右侧预览面板中渲染。</span>';
 }
 
 // ============ 清空输出 ============
 clearOutputBtn.addEventListener("click", () => {
   outputContent.innerHTML = "";
   webPreview.classList.add("hidden");
-  webPreview.srcdoc = "";
+  if (webPreview.dataset.blobUrl) {
+    URL.revokeObjectURL(webPreview.dataset.blobUrl);
+    webPreview.dataset.blobUrl = "";
+  }
+  webPreview.src = "about:blank";
 });
+
+// ================================================================
+//  上下文嗅探器 (Scope Sniffer)
+//  在 HTML 混合文件中，O(N) 判断光标处于 HTML / CSS / JS 作用域
+// ================================================================
+
+/**
+ * detectScope(text, cursorPos)
+ *
+ * 算法：从文本开头到 cursorPos 做一次线性扫描。
+ * 维护一个状态机：
+ *   - 遇到 <style  → 找到 > 后进入 "css" 模式
+ *   - 遇到 </style> → 回到 "html" 模式
+ *   - 遇到 <script → 找到 > 后进入 "javascript" 模式
+ *   - 遇到 </script> → 回到 "html" 模式
+ *   - 其他情况保持当前模式
+ *
+ * 时间复杂度 O(N)，N = cursorPos
+ * 无正则、无回溯，纯状态机驱动
+ */
+function detectScope(text, cursorPos) {
+  let scope = "html";
+  const len = Math.min(cursorPos, text.length);
+  let i = 0;
+
+  while (i < len) {
+    if (text[i] === "<") {
+      // 检测 <style 开标签
+      if (matchTagAt(text, i, "<style", len)) {
+        // 找到 > 表示标签结束
+        const closeAngle = text.indexOf(">", i + 6);
+        if (closeAngle !== -1 && closeAngle < len) {
+          scope = "css";
+          i = closeAngle + 1;
+          continue;
+        }
+      }
+      // 检测 </style> 闭标签
+      else if (matchTagAt(text, i, "</style>", len)) {
+        scope = "html";
+        i += 8;
+        continue;
+      }
+      // 检测 <script 开标签
+      else if (matchTagAt(text, i, "<script", len)) {
+        const closeAngle = text.indexOf(">", i + 7);
+        if (closeAngle !== -1 && closeAngle < len) {
+          scope = "javascript";
+          i = closeAngle + 1;
+          continue;
+        }
+      }
+      // 检测 </script> 闭标签
+      else if (matchTagAt(text, i, "</script>", len)) {
+        scope = "html";
+        i += 9;
+        continue;
+      }
+    }
+    i++;
+  }
+
+  return scope;
+}
+
+/** 大小写不敏感地检测 text[pos..] 是否以 tag 开头 */
+function matchTagAt(text, pos, tag, maxLen) {
+  if (pos + tag.length > maxLen) return false;
+  for (let j = 0; j < tag.length; j++) {
+    if (text[pos + j].toLowerCase() !== tag[j].toLowerCase()) return false;
+  }
+  return true;
+}
 
 // ============ 自动补全 ============
 editor.addEventListener("input", () => {
@@ -174,7 +460,7 @@ editor.addEventListener("blur", () => {
   setTimeout(hideAutocomplete, 150);
 });
 
-// Tab 键缩进支持
+// Tab 键缩进
 editor.addEventListener("keydown", (e) => {
   if (e.key === "Tab" && autocompletePopup.classList.contains("hidden")) {
     e.preventDefault();
@@ -189,7 +475,6 @@ async function handleAutocomplete() {
   const cursorPos = editor.selectionStart;
   const textBefore = editor.value.substring(0, cursorPos);
 
-  // 提取光标前的当前单词（前缀）
   const match = textBefore.match(/[a-zA-Z_][\w-]*$/);
   if (!match || match[0].length < 1) {
     hideAutocomplete();
@@ -197,7 +482,15 @@ async function handleAutocomplete() {
   }
 
   const prefix = match[0];
-  const language = langSelect.value;
+
+  // 确定补全语言/作用域
+  let language;
+  if (isWebMode) {
+    // Web 项目模式：根据文件扩展名 + Scope Sniffer 判定
+    language = getLanguageForAutocomplete();
+  } else {
+    language = langSelect.value;
+  }
 
   try {
     const results = await invoke("autocomplete", { prefix, language });
@@ -207,13 +500,33 @@ async function handleAutocomplete() {
       return;
     }
 
-    showAutocomplete(results, prefix);
+    showAutocomplete(results, prefix, language);
   } catch {
     hideAutocomplete();
   }
 }
 
-function showAutocomplete(items, prefix) {
+/**
+ * 确定当前应该使用哪个 Trie 进行补全
+ * Web 项目模式下：
+ *   - .css 文件 → css
+ *   - .js 文件 → javascript
+ *   - .html 文件 → 使用 Scope Sniffer 判断
+ */
+function getLanguageForAutocomplete() {
+  if (!activeTab) return "html";
+
+  const ext = activeTab.split(".").pop().toLowerCase();
+  if (ext === "css") return "css";
+  if (ext === "js") return "javascript";
+  if (ext === "html" || ext === "htm") {
+    // HTML 文件使用 Scope Sniffer
+    return detectScope(editor.value, editor.selectionStart);
+  }
+  return "html";
+}
+
+function showAutocomplete(items, prefix, scope) {
   completionItems = items;
   selectedIndex = 0;
 
@@ -221,7 +534,19 @@ function showAutocomplete(items, prefix) {
   for (let i = 0; i < items.length && i < 10; i++) {
     const div = document.createElement("div");
     div.className = "autocomplete-item" + (i === 0 ? " selected" : "");
-    div.textContent = items[i];
+
+    const text = document.createElement("span");
+    text.textContent = items[i];
+    div.appendChild(text);
+
+    // 在 HTML 文件的补全项旁显示 scope 标记
+    if (isWebMode && activeTab && activeTab.endsWith(".html")) {
+      const badge = document.createElement("span");
+      badge.className = "scope-badge";
+      badge.textContent = scope === "javascript" ? "JS" : scope.toUpperCase();
+      div.appendChild(badge);
+    }
+
     div.addEventListener("mousedown", (e) => {
       e.preventDefault();
       applyCompletion(items[i]);
@@ -229,7 +554,7 @@ function showAutocomplete(items, prefix) {
     autocompletePopup.appendChild(div);
   }
 
-  // 定位弹出框（粗略计算）
+  // 定位
   const rect = editor.getBoundingClientRect();
   const lineHeight = 24;
   const lines = editor.value.substring(0, editor.selectionStart).split("\n");
@@ -256,7 +581,6 @@ function updateSelection() {
   items.forEach((item, i) => {
     item.classList.toggle("selected", i === selectedIndex);
   });
-  // 滚动到可见区域
   if (items[selectedIndex]) {
     items[selectedIndex].scrollIntoView({ block: "nearest" });
   }
