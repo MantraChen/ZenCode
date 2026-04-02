@@ -3,6 +3,19 @@
 version = 4
 
 [[package]]
+name = "ZenCode"
+version = "0.2.0"
+dependencies = [
+ "dirs",
+ "regex",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+]
+
+[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5328,19 +5341,6 @@ dependencies = [
  "serde",
  "winnow 0.7.15",
  "zvariant",
-]
-
-[[package]]
-name = "zencode"
-version = "0.1.0"
-dependencies = [
- "dirs",
- "regex",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
 ]
 
 [[package]]

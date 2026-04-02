@@ -339,11 +339,28 @@ async function runWebProject() {
     webPreview.src = url;
     webPreview.classList.remove("hidden");
 
-    outputContent.innerHTML = '<span class="output-success">Web 项目已在右侧预览面板中渲染。</span>';
+    outputContent.innerHTML = '<span class="output-success">Web 项目已在右侧预览面板中渲染。</span>\n';
   } catch (err) {
     outputContent.innerHTML = `<span class="output-error">打包失败: ${err}</span>`;
   }
 }
+
+// ============ Web 项目 Console 输出捕获 ============
+window.addEventListener("message", (e) => {
+  if (e.data && e.data.__zencode_console) {
+    const span = document.createElement("span");
+    const level = e.data.level;
+    if (level === "error") {
+      span.className = "output-error";
+    } else if (level === "warn") {
+      span.className = "output-friendly";
+    } else {
+      span.className = "output-stdout";
+    }
+    span.textContent = (level === "log" ? "" : "[" + level + "] ") + e.data.text + "\n";
+    outputContent.appendChild(span);
+  }
+});
 
 // ============ 清空输出 ============
 clearOutputBtn.addEventListener("click", () => {

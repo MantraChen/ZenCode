@@ -101,7 +101,27 @@ fn execute_python(code: &str, work_dir: &Path, tc: &ToolchainManager) -> ExecRes
     fs::write(&src_path, code).unwrap_or_default();
 
     let python = tc.python();
-    run_command(&python, &[src_path.to_str().unwrap()])
+    // -u: 禁用 stdout/stderr 缓冲，确保输出能被正确捕获
+    match Command::new(&python)
+        .args(&["-u", src_path.to_str().unwrap()])
+        .env("PYTHONUNBUFFERED", "1")
+        .current_dir(work_dir)
+        .output()
+    {
+        Ok(output) => ExecResult {
+            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            exit_code: output.status.code().unwrap_or(1),
+        },
+        Err(e) => ExecResult {
+            stdout: String::new(),
+            stderr: format!(
+                "无法启动 {}：{}。\n\n请确认已安装对应的编译器/解释器，或将便携工具链放入 toolchains/ 目录。",
+                python, e
+            ),
+            exit_code: 1,
+        },
+    }
 }
 
 fn run_command(program: &str, args: &[&str]) -> ExecResult {
@@ -169,6 +189,39 @@ pub fn bundle_web_project(files: &HashMap<String, String>) -> Result<String, Str
         }
     }
     result = new_result;
+
+    // 注入 console 拦截脚本，将 console.log/warn/error 输出通过 postMessage 传回父窗口
+    let console_capture = r#"<script>
+(function() {
+  var _origConsole = { log: console.log, warn: console.warn, error: console.error, info: console.info };
+  function send(level, args) {
+    var parts = [];
+    for (var i = 0; i < args.length; i++) {
+      try { parts.push(typeof args[i] === 'object' ? JSON.stringify(args[i], null, 2) : String(args[i])); }
+      catch(e) { parts.push(String(args[i])); }
+    }
+    window.parent.postMessage({ __zencode_console: true, level: level, text: parts.join(' ') }, '*');
+  }
+  console.log   = function() { send('log',   arguments); _origConsole.log.apply(console, arguments); };
+  console.warn  = function() { send('warn',  arguments); _origConsole.warn.apply(console, arguments); };
+  console.error = function() { send('error', arguments); _origConsole.error.apply(console, arguments); };
+  console.info  = function() { send('log',   arguments); _origConsole.info.apply(console, arguments); };
+  window.addEventListener('error', function(e) {
+    send('error', [e.message + ' (line ' + e.lineno + ')']);
+  });
+})();
+</script>"#;
+
+    // 在 <head> 之后或 <html> 之后注入
+    if let Some(pos) = result.find("<head>") {
+        result.insert_str(pos + 6, console_capture);
+    } else if let Some(pos) = result.find("<html") {
+        if let Some(end) = result[pos..].find('>') {
+            result.insert_str(pos + end + 1, console_capture);
+        }
+    } else {
+        result.insert_str(0, console_capture);
+    }
 
     Ok(result)
 }

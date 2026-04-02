@@ -1,8 +1,8 @@
 [package]
-name = "zencode"
-version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+name = "ZenCode"
+version = "0.2.0"
+description = "零配置代码练习工具，支持 C/C++/Java/Python，一键运行"
+authors = ["HowieSun"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

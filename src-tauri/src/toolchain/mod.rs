@@ -58,14 +58,40 @@ impl ToolchainManager {
         }
     }
 
-    /// 获取 GCC 路径
+    /// 获取 C 编译器路径
+    /// 优先便携 GCC，回退到系统 gcc，macOS/Linux 再回退到 cc (clang)
     pub fn gcc(&self) -> String {
-        self.resolve("mingw64", "gcc")
+        let primary = self.resolve("mingw64", "gcc");
+        if primary != "gcc" {
+            return primary; // 便携版找到了
+        }
+        // 系统 gcc 存在就用
+        if which_exists("gcc") {
+            return "gcc".to_string();
+        }
+        // macOS/Linux 回退到 cc (通常是 clang)
+        #[cfg(not(windows))]
+        if which_exists("cc") {
+            return "cc".to_string();
+        }
+        "gcc".to_string() // 最终回退，让错误信息显示 gcc
     }
 
-    /// 获取 G++ 路径
+    /// 获取 C++ 编译器路径
+    /// 优先便携 G++，回退到系统 g++，macOS/Linux 再回退到 c++ (clang++)
     pub fn gpp(&self) -> String {
-        self.resolve("mingw64", "g++")
+        let primary = self.resolve("mingw64", "g++");
+        if primary != "g++" {
+            return primary;
+        }
+        if which_exists("g++") {
+            return "g++".to_string();
+        }
+        #[cfg(not(windows))]
+        if which_exists("c++") {
+            return "c++".to_string();
+        }
+        "g++".to_string()
     }
 
     /// 获取 Python 解释器路径
@@ -232,8 +258,11 @@ mod tests {
         let mgr = ToolchainManager::init(None, &tmp);
         // 没有便携工具链，应该回退到系统命令
         assert!(!mgr.is_portable());
-        assert_eq!(mgr.gcc(), "gcc");
-        assert_eq!(mgr.gpp(), "g++");
+        // C/C++ 编译器回退到 gcc/cc 或 g++/c++ 取决于系统安装情况
+        let gcc = mgr.gcc();
+        assert!(gcc == "gcc" || gcc == "cc", "gcc fallback should be gcc or cc, got: {}", gcc);
+        let gpp = mgr.gpp();
+        assert!(gpp == "g++" || gpp == "c++", "g++ fallback should be g++ or c++, got: {}", gpp);
         assert_eq!(mgr.javac(), "javac");
         assert_eq!(mgr.java(), "java");
         // 清理
