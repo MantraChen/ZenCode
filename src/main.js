@@ -56,6 +56,7 @@ langSelect.addEventListener("change", async () => {
 async function enterWebMode() {
   isWebMode = true;
   sidebar.classList.remove("hidden");
+  document.getElementById("sidebar-resizer").classList.remove("hidden");
   tabBar.classList.remove("hidden");
 
   // 在后端创建 Web 项目模板
@@ -72,8 +73,13 @@ async function enterWebMode() {
 function exitWebMode() {
   isWebMode = false;
   sidebar.classList.add("hidden");
+  document.getElementById("sidebar-resizer").classList.add("hidden");
   tabBar.classList.add("hidden");
   webPreview.classList.add("hidden");
+  document.getElementById("preview-resizer").classList.add("hidden");
+  // 恢复 editor-area 的 flex
+  document.querySelector(".editor-area").style.flex = "";
+  document.querySelector(".editor-area").style.width = "";
   openTabs = [];
   activeTab = null;
   fileTree.innerHTML = "";
@@ -338,6 +344,7 @@ async function runWebProject() {
     webPreview.dataset.blobUrl = url;
     webPreview.src = url;
     webPreview.classList.remove("hidden");
+    document.getElementById("preview-resizer").classList.remove("hidden");
 
     outputContent.innerHTML = '<span class="output-success">Web 项目已在右侧预览面板中渲染。</span>\n';
   } catch (err) {
@@ -366,6 +373,7 @@ window.addEventListener("message", (e) => {
 clearOutputBtn.addEventListener("click", () => {
   outputContent.innerHTML = "";
   webPreview.classList.add("hidden");
+  document.getElementById("preview-resizer").classList.add("hidden");
   if (webPreview.dataset.blobUrl) {
     URL.revokeObjectURL(webPreview.dataset.blobUrl);
     webPreview.dataset.blobUrl = "";
@@ -617,3 +625,92 @@ function applyCompletion(word) {
   editor.focus();
   hideAutocomplete();
 }
+
+// ============ 可拖拽面板 ============
+(function initResizers() {
+  const outputResizer = document.getElementById("output-resizer");
+  const sidebarResizer = document.getElementById("sidebar-resizer");
+  const previewResizer = document.getElementById("preview-resizer");
+  const editorPane = document.querySelector(".editor-pane");
+  const outputPane = document.querySelector(".output-pane");
+  const workspace = document.querySelector(".workspace");
+  const mainContainer = document.querySelector(".main-container");
+  const editorArea = document.querySelector(".editor-area");
+
+  function setupResizer(resizer, onDrag, direction) {
+    if (!resizer) return;
+    let startPos, startSizeA, startSizeB;
+
+    resizer.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      resizer.classList.add("active");
+      const initial = onDrag.init(e);
+      startPos = direction === "row" ? e.clientY : e.clientX;
+      startSizeA = initial.sizeA;
+      startSizeB = initial.sizeB;
+
+      // 拖拽时禁止 iframe 捕获鼠标事件
+      webPreview.style.pointerEvents = "none";
+
+      function onMouseMove(e) {
+        const current = direction === "row" ? e.clientY : e.clientX;
+        const delta = current - startPos;
+        onDrag.move(delta, startSizeA, startSizeB);
+      }
+
+      function onMouseUp() {
+        resizer.classList.remove("active");
+        webPreview.style.pointerEvents = "";
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+      }
+
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+    });
+  }
+
+  // 输出面板上下拖拽
+  setupResizer(outputResizer, {
+    init: () => ({
+      sizeA: editorPane.offsetHeight,
+      sizeB: outputPane.offsetHeight,
+    }),
+    move: (delta, startA, startB) => {
+      const newEditor = Math.max(100, startA + delta);
+      const newOutput = Math.max(60, startB - delta);
+      editorPane.style.flex = "none";
+      editorPane.style.height = newEditor + "px";
+      outputPane.style.height = newOutput + "px";
+    },
+  }, "row");
+
+  // 侧边栏左右拖拽
+  setupResizer(sidebarResizer, {
+    init: () => ({
+      sizeA: sidebar.offsetWidth,
+      sizeB: 0,
+    }),
+    move: (delta, startA) => {
+      const newWidth = Math.max(120, Math.min(500, startA + delta));
+      sidebar.style.width = newWidth + "px";
+      sidebar.style.minWidth = newWidth + "px";
+    },
+  }, "col");
+
+  // Web 预览左右拖拽
+  setupResizer(previewResizer, {
+    init: () => ({
+      sizeA: editorArea.offsetWidth,
+      sizeB: webPreview.offsetWidth,
+    }),
+    move: (delta, startA, startB) => {
+      const total = startA + startB;
+      const newEditor = Math.max(200, startA + delta);
+      const newPreview = Math.max(200, total - newEditor);
+      editorArea.style.flex = "none";
+      editorArea.style.width = newEditor + "px";
+      webPreview.style.width = newPreview + "px";
+    },
+  }, "col");
+})();

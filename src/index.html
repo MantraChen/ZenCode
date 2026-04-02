@@ -36,6 +36,8 @@
       </div>
       <div id="file-tree" class="file-tree"></div>
     </aside>
+    <!-- 侧边栏拖拽手柄 -->
+    <div id="sidebar-resizer" class="resizer resizer-col hidden"></div>
 
     <!-- 右侧编辑区 -->
     <div class="editor-area">
@@ -50,6 +52,9 @@
           <div id="autocomplete-popup" class="autocomplete-popup hidden"></div>
         </div>
 
+        <!-- 输出面板拖拽手柄 -->
+        <div id="output-resizer" class="resizer resizer-row"></div>
+
         <div class="output-pane">
           <div class="output-header">
             <span>输出</span>
@@ -60,6 +65,8 @@
       </div>
     </div>
 
+    <!-- Web 预览拖拽手柄 -->
+    <div id="preview-resizer" class="resizer resizer-col hidden"></div>
     <!-- Web 预览 iframe -->
     <iframe id="web-preview" class="hidden" sandbox="allow-scripts"></iframe>
   </div>

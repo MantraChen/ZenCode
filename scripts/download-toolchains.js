@@ -8,10 +8,10 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 🚨 核心拦截：如果当前是 Mac 环境，直接跳过 Windows 工具链下载
+// 核心拦截：如果当前是 Mac 环境，直接跳过 Windows 工具链下载
 if (process.platform === 'darwin') {
-    console.log("🍎 检测到 macOS 开发环境！跳过 Windows 便携编译器的下载。");
-    console.log("👉 本地开发测试将自动调用 Mac 系统自带的 python3 和 gcc。");
+    console.log("[skip] macOS 开发环境，跳过 Windows 便携编译器下载。");
+    console.log("[info] 本地开发测试将使用系统自带的 python3 和 gcc。");
     process.exit(0);
 }
 
@@ -31,10 +31,10 @@ const TOOLCHAINS = {
 
 async function downloadAndExtract(name, config) {
     if (fs.existsSync(config.dest)) {
-        console.log(`✅ [${name}] 工具链已存在: ${config.dest}`);
+        console.log(`[ok] [${name}] 工具链已存在: ${config.dest}`);
         return;
     }
-    console.log(`⏳ 开始下载 [${name}] 工具链... 这可能需要一两分钟。`);
+    console.log(`[download] [${name}] 开始下载工具链...`);
     
     fs.mkdirSync(config.dest, { recursive: true });
     
@@ -46,19 +46,19 @@ async function downloadAndExtract(name, config) {
 
     return new Promise((resolve, reject) => {
         response.data.pipe(unzipper.Extract({ path: config.dest }))
-            .on('close', () => resolve(console.log(`🎉 [${name}] 解压完成!`)))
+            .on('close', () => resolve(console.log(`[ok] [${name}] 解压完成`)))
             .on('error', reject);
     });
 }
 
 async function main() {
-    console.log("🚀 初始化 Windows 打包所需的工具链...");
+    console.log("[init] 准备 Windows 打包所需的工具链...");
     try {
         await downloadAndExtract('python', TOOLCHAINS.python);
         await downloadAndExtract('gcc', TOOLCHAINS.gcc);
-        console.log("✨ 所有底层编译工具准备就绪！");
+        console.log("[ok] 所有工具链准备就绪");
     } catch (error) {
-        console.error("❌ 下载失败:", error.message);
+        console.error("[error] 下载失败:", error.message);
         process.exit(1);
     }
 }

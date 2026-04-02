@@ -88,8 +88,13 @@ fn execute_java(code: &str, work_dir: &Path, tc: &ToolchainManager) -> ExecResul
     fs::write(&src_path, code).unwrap_or_default();
 
     let javac = tc.javac();
+    let src = src_path.to_str().unwrap();
+    // -encoding UTF-8: 以 UTF-8 读取源码
+    // -J-Dfile.encoding=UTF-8: 让 javac 自身以 UTF-8 输出错误信息（防止 Windows GBK 乱码）
     let compile = run_command(&javac, &[
-        src_path.to_str().unwrap(),
+        "-encoding", "UTF-8",
+        "-J-Dfile.encoding=UTF-8",
+        src,
     ]);
 
     if compile.exit_code != 0 {
@@ -97,8 +102,13 @@ fn execute_java(code: &str, work_dir: &Path, tc: &ToolchainManager) -> ExecResul
     }
 
     let java = tc.java();
+    let work = work_dir.to_str().unwrap();
+    // -Dfile.encoding=UTF-8: 让 java 进程以 UTF-8 输出
     run_command(&java, &[
-        "-cp", work_dir.to_str().unwrap(),
+        "-Dfile.encoding=UTF-8",
+        "-Dstdout.encoding=UTF-8",
+        "-Dstderr.encoding=UTF-8",
+        "-cp", work,
         &class_name,
     ])
 }
@@ -112,6 +122,7 @@ fn execute_python(code: &str, work_dir: &Path, tc: &ToolchainManager) -> ExecRes
     let mut cmd = Command::new(&python);
     cmd.args(&["-u", src_path.to_str().unwrap()])
         .env("PYTHONUNBUFFERED", "1")
+        .env("PYTHONIOENCODING", "utf-8")
         .current_dir(work_dir);
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
