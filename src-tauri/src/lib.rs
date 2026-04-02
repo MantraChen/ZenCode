@@ -260,6 +260,11 @@ fn ws_rename(path: &str, new_name: &str) -> Result<String, String> {
     workspace::rename_entry(std::path::Path::new(path), new_name)
 }
 
+#[tauri::command]
+fn ws_move(src: &str, dest_dir: &str) -> Result<String, String> {
+    workspace::move_entry(std::path::Path::new(src), std::path::Path::new(dest_dir))
+}
+
 // ============ VFS 文件系统 IPC（Web 项目专用） ============
 
 #[tauri::command]
@@ -360,6 +365,7 @@ pub fn run() {
             ws_create_dir,
             ws_delete,
             ws_rename,
+            ws_move,
             // VFS（Web 项目）
             vfs_list_files,
             vfs_read_file,

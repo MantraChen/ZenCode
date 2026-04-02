@@ -99,6 +99,17 @@ pub fn delete_entry(path: &Path) -> Result<(), String> {
     }
 }
 
+/// 移动文件/目录到新的父目录
+pub fn move_entry(src: &Path, dest_dir: &Path) -> Result<String, String> {
+    let name = src.file_name().ok_or("无效路径")?;
+    let dest = dest_dir.join(name);
+    if dest.exists() {
+        return Err(format!("目标位置已存在 {}", name.to_string_lossy()));
+    }
+    fs::rename(src, &dest).map_err(|e| format!("移动失败: {}", e))?;
+    Ok(dest.to_string_lossy().to_string())
+}
+
 /// 重命名
 pub fn rename_entry(old: &Path, new_name: &str) -> Result<String, String> {
     let new_path = old.parent()

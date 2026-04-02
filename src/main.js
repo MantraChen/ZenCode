@@ -10,6 +10,7 @@ const toggleStdinBtn = document.getElementById("toggle-stdin");
 const stdinArea = document.getElementById("stdin-area");
 const stdinInput = document.getElementById("stdin-input");
 const autocompletePopup = document.getElementById("autocomplete-popup");
+const highlightLayer = document.getElementById("highlight-layer");
 const webPreview = document.getElementById("web-preview");
 const sidebar = document.getElementById("sidebar");
 const fileTree = document.getElementById("file-tree");
@@ -141,10 +142,115 @@ function renderVfsFileTree(files) {
   }
 }
 
+// --- 自定义拖拽系统（mousedown/mousemove/mouseup，不依赖 HTML5 DnD） ---
+let dragState = null;   // { entry, srcDiv, ghost }
+let folderDivMap = [];  // [{ entry, div }] — 每次渲染树时重建
+
+function initDrag(e, entry, div) {
+  // 需要按住一小段距离才真正开始拖拽，防止和 click 冲突
+  const startX = e.clientX, startY = e.clientY;
+  const threshold = 5;
+
+  function onMove(e2) {
+    const dx = e2.clientX - startX, dy = e2.clientY - startY;
+    if (Math.abs(dx) < threshold && Math.abs(dy) < threshold) return;
+    // 真正开始拖拽
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onCancel);
+    startDrag(e2, entry, div);
+  }
+  function onCancel() {
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onCancel);
+  }
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onCancel);
+}
+
+function startDrag(e, entry, srcDiv) {
+  // 禁止拖拽过程中选中文字
+  document.body.style.userSelect = "none";
+  document.body.style.webkitUserSelect = "none";
+
+  // 创建跟随鼠标的幽灵元素
+  const ghost = document.createElement("div");
+  ghost.className = "drag-ghost";
+  ghost.textContent = entry.name;
+  ghost.style.left = e.clientX + "px";
+  ghost.style.top = e.clientY + "px";
+  document.body.appendChild(ghost);
+
+  srcDiv.classList.add("dragging");
+  dragState = { entry, srcDiv, ghost };
+
+  let currentDropTarget = null;
+
+  function onMove(e2) {
+    ghost.style.left = e2.clientX + 12 + "px";
+    ghost.style.top = e2.clientY + 4 + "px";
+
+    // 寻找鼠标下方的文件夹 drop 目标
+    const target = findDropTarget(e2.clientX, e2.clientY);
+    if (target !== currentDropTarget) {
+      if (currentDropTarget) currentDropTarget.div.classList.remove("drop-target");
+      currentDropTarget = target;
+      if (currentDropTarget) currentDropTarget.div.classList.add("drop-target");
+    }
+  }
+
+  function onUp(e2) {
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onUp);
+    document.body.style.userSelect = "";
+    document.body.style.webkitUserSelect = "";
+    ghost.remove();
+    srcDiv.classList.remove("dragging");
+    if (currentDropTarget) {
+      currentDropTarget.div.classList.remove("drop-target");
+      doMove(entry.path, currentDropTarget.entry.path);
+    }
+    dragState = null;
+  }
+
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onUp);
+}
+
+function findDropTarget(x, y) {
+  for (const item of folderDivMap) {
+    // 不能拖到自身或自身子目录
+    if (!dragState || item.entry.path === dragState.entry.path) continue;
+    if (item.entry.path.startsWith(dragState.entry.path + "/") ||
+        item.entry.path.startsWith(dragState.entry.path + "\\")) continue;
+    const rect = item.div.getBoundingClientRect();
+    if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+      return item;
+    }
+  }
+  return null;
+}
+
+async function doMove(srcPath, destDirPath) {
+  if (!srcPath || srcPath === destDirPath) return;
+  try {
+    const newPath = await invoke("ws_move", { src: srcPath, destDir: destDirPath });
+    const tab = openTabs.find(t => t.path === srcPath);
+    if (tab) {
+      tab.path = newPath;
+      if (activeTab === srcPath) activeTab = newPath;
+      renderTabs();
+    }
+    await refreshFileTree();
+  } catch (err) {
+    outputContent.innerHTML = `<span class="output-error">${err}</span>`;
+  }
+}
+
 // --- 真实文件树（非 Web 语言） ---
 function renderRealFileTree(entries, container, depth) {
   if (!container) {
     fileTree.innerHTML = "";
+    folderDivMap = [];
     // 打开文件夹按钮
     const openBtn = document.createElement("div");
     openBtn.className = "file-item";
@@ -174,6 +280,12 @@ function renderRealFileTree(entries, container, depth) {
         div.querySelector(".file-icon").innerHTML = expanded ? "&#9662;" : "&#9656;";
       });
       div.addEventListener("contextmenu", (e) => showContextMenu(e, entry));
+      div.addEventListener("mousedown", (e) => {
+        if (e.button === 0) initDrag(e, entry, div);
+      });
+
+      // 注册为 drop 目标
+      folderDivMap.push({ entry, div });
 
       container.appendChild(div);
       container.appendChild(childContainer);
@@ -185,6 +297,9 @@ function renderRealFileTree(entries, container, depth) {
       `;
       div.addEventListener("click", () => openRealFile(entry.path, entry.name));
       div.addEventListener("contextmenu", (e) => showContextMenu(e, entry));
+      div.addEventListener("mousedown", (e) => {
+        if (e.button === 0) initDrag(e, entry, div);
+      });
       container.appendChild(div);
     }
   }
@@ -221,6 +336,7 @@ async function loadVfsFile(name) {
   activeTab = name;
   activeTabName = name;
   await invoke("vfs_set_active", { name });
+  scheduleHighlight();
 }
 
 function deleteVfsFile(name) {
@@ -246,6 +362,7 @@ async function openRealFile(path, name) {
     editor.value = content;
     activeTab = path;
     activeTabName = name;
+    scheduleHighlight();
 
     if (!openTabs.find(t => t.path === path)) {
       openTabs.push({ name, path });
@@ -673,6 +790,7 @@ editor.addEventListener("keydown", (e) => {
     const end = editor.selectionEnd;
     editor.value = editor.value.substring(0, start) + "    " + editor.value.substring(end);
     editor.selectionStart = editor.selectionEnd = start + 4;
+    scheduleHighlight();
   }
 });
 
@@ -826,6 +944,7 @@ function applyCompletion(word) {
   editor.selectionStart = editor.selectionEnd = prefixStart + word.length;
   editor.focus();
   hideAutocomplete();
+  scheduleHighlight();
 }
 
 // ============ 右键上下文菜单 ============
@@ -1028,6 +1147,225 @@ function copyToClipboard(text) {
     ta.remove();
   });
 }
+
+// ============ 语法高亮 ============
+const HIGHLIGHT_RULES = {
+  c: {
+    keywords: /\b(auto|break|case|char|const|continue|default|do|double|else|enum|extern|float|for|goto|if|inline|int|long|register|restrict|return|short|signed|sizeof|static|struct|switch|typedef|union|unsigned|void|volatile|while|_Bool|_Complex|_Imaginary|NULL|true|false)\b/g,
+    types: /\b(int|char|float|double|void|long|short|unsigned|signed|size_t|bool|FILE|uint8_t|uint16_t|uint32_t|uint64_t|int8_t|int16_t|int32_t|int64_t)\b/g,
+    builtins: /\b(printf|scanf|malloc|free|strlen|strcmp|strcpy|memcpy|memset|fopen|fclose|fprintf|fscanf|exit|abort|sizeof)\b/g,
+  },
+  cpp: {
+    keywords: /\b(alignas|alignof|and|and_eq|asm|auto|bitand|bitor|bool|break|case|catch|char|char8_t|char16_t|char32_t|class|compl|concept|const|consteval|constexpr|constinit|const_cast|continue|co_await|co_return|co_yield|decltype|default|delete|do|double|dynamic_cast|else|enum|explicit|export|extern|false|float|for|friend|goto|if|inline|int|long|mutable|namespace|new|noexcept|not|not_eq|nullptr|operator|or|or_eq|private|protected|public|register|reinterpret_cast|requires|return|short|signed|sizeof|static|static_assert|static_cast|struct|switch|template|this|thread_local|throw|true|try|typedef|typeid|typename|union|unsigned|using|virtual|void|volatile|wchar_t|while|xor|xor_eq|override|final)\b/g,
+    types: /\b(string|vector|map|set|list|deque|array|pair|tuple|shared_ptr|unique_ptr|optional|variant|any|size_t|uint8_t|uint16_t|uint32_t|uint64_t|int8_t|int16_t|int32_t|int64_t|cout|cin|endl|cerr|ostream|istream|ifstream|ofstream|stringstream)\b/g,
+    builtins: /\b(std|cout|cin|endl|cerr|printf|scanf|malloc|free|sizeof|new|delete)\b/g,
+  },
+  java: {
+    keywords: /\b(abstract|assert|boolean|break|byte|case|catch|char|class|const|continue|default|do|double|else|enum|extends|final|finally|float|for|goto|if|implements|import|instanceof|int|interface|long|native|new|null|package|private|protected|public|return|short|static|strictfp|super|switch|synchronized|this|throw|throws|transient|try|void|volatile|while|true|false|var|yield|record|sealed|permits|non-sealed)\b/g,
+    types: /\b(String|Integer|Boolean|Double|Float|Long|Short|Byte|Character|Object|List|ArrayList|Map|HashMap|Set|HashSet|LinkedList|Queue|Stack|Scanner|System|Math|Arrays|Collections|Optional|Stream|StringBuilder|Exception|RuntimeException|Thread|Runnable)\b/g,
+    builtins: /\b(System\.out\.println|System\.out\.print|System\.err|Math\.\w+)\b/g,
+  },
+  python: {
+    keywords: /\b(False|None|True|and|as|assert|async|await|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|nonlocal|not|or|pass|raise|return|try|while|with|yield)\b/g,
+    types: /\b(int|float|str|bool|list|dict|tuple|set|frozenset|bytes|bytearray|complex|type|object|NoneType)\b/g,
+    builtins: /\b(print|input|len|range|enumerate|zip|map|filter|sorted|reversed|min|max|sum|abs|round|open|isinstance|issubclass|hasattr|getattr|setattr|delattr|super|property|classmethod|staticmethod|format|repr|id|hash|type|dir|vars|globals|locals|iter|next|all|any)\b/g,
+  },
+  html: null,     // HTML 用专用高亮
+  css: null,      // CSS 用专用高亮
+  javascript: {
+    keywords: /\b(await|break|case|catch|class|const|continue|debugger|default|delete|do|else|export|extends|finally|for|from|function|if|import|in|instanceof|let|new|of|return|static|super|switch|this|throw|try|typeof|var|void|while|with|yield|async|null|undefined|true|false|NaN|Infinity)\b/g,
+    types: /\b(Array|Boolean|Date|Error|Function|JSON|Map|Math|Number|Object|Promise|Proxy|RegExp|Set|String|Symbol|WeakMap|WeakSet|BigInt|Int8Array|Uint8Array|Float32Array|Float64Array|ArrayBuffer|DataView|Element|HTMLElement|Node|NodeList|Event|Response|Request|URL|Headers|FormData)\b/g,
+    builtins: /\b(console|document|window|navigator|localStorage|sessionStorage|fetch|setTimeout|setInterval|clearTimeout|clearInterval|requestAnimationFrame|alert|confirm|prompt|parseInt|parseFloat|isNaN|isFinite|encodeURI|decodeURI|encodeURIComponent|decodeURIComponent|require|module|exports|process)\b/g,
+  },
+};
+
+function escapeHtml(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function highlightCode(code, lang) {
+  if (!lang || !code) return escapeHtml(code || "") + "\n";
+
+  // HTML: 专用高亮
+  if (lang === "html") return highlightHtml(code);
+  // CSS: 专用高亮
+  if (lang === "css") return highlightCss(code);
+
+  const rules = HIGHLIGHT_RULES[lang];
+  if (!rules) return escapeHtml(code) + "\n";
+
+  // 先提取字符串和注释，用占位符替换
+  const tokens = [];
+  let safe = code;
+
+  // 提取多行注释 /* ... */
+  safe = safe.replace(/\/\*[\s\S]*?\*\//g, (m) => {
+    const i = tokens.length;
+    tokens.push(`<span class="hl-comment">${escapeHtml(m)}</span>`);
+    return `\x00T${i}\x00`;
+  });
+
+  // 提取单行注释 // ... 和 # ... (python)
+  const commentRe = (lang === "python") ? /#[^\n]*/g : /\/\/[^\n]*/g;
+  safe = safe.replace(commentRe, (m) => {
+    const i = tokens.length;
+    tokens.push(`<span class="hl-comment">${escapeHtml(m)}</span>`);
+    return `\x00T${i}\x00`;
+  });
+
+  // 提取字符串 "..." '...' `...`
+  safe = safe.replace(/("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g, (m) => {
+    const i = tokens.length;
+    tokens.push(`<span class="hl-string">${escapeHtml(m)}</span>`);
+    return `\x00T${i}\x00`;
+  });
+
+  // 转义 HTML
+  safe = escapeHtml(safe);
+
+  // 数字
+  safe = safe.replace(/\b(\d+\.?\d*(?:[eE][+-]?\d+)?[fFlLdD]?|0[xX][0-9a-fA-F]+[lL]?|0[bB][01]+[lL]?)\b/g,
+    '<span class="hl-number">$1</span>');
+
+  // 函数调用: word(
+  safe = safe.replace(/\b([a-zA-Z_]\w*)(\s*\()/g, (m, name, paren) => {
+    // 如果已经是关键字就不标注为函数
+    if (rules.keywords && rules.keywords.test(name)) {
+      rules.keywords.lastIndex = 0;
+      return m;
+    }
+    return `<span class="hl-function">${name}</span>${paren}`;
+  });
+
+  // 关键字
+  if (rules.keywords) {
+    rules.keywords.lastIndex = 0;
+    safe = safe.replace(rules.keywords, '<span class="hl-keyword">$&</span>');
+  }
+
+  // 类型
+  if (rules.types) {
+    rules.types.lastIndex = 0;
+    safe = safe.replace(rules.types, '<span class="hl-type">$&</span>');
+  }
+
+  // 内置
+  if (rules.builtins) {
+    rules.builtins.lastIndex = 0;
+    safe = safe.replace(rules.builtins, '<span class="hl-builtin">$&</span>');
+  }
+
+  // 操作符
+  safe = safe.replace(/([+\-*/%=!&|^~<>?:]+)/g, '<span class="hl-operator">$1</span>');
+
+  // 恢复字符串/注释占位符
+  safe = safe.replace(/\x00T(\d+)\x00/g, (_, idx) => tokens[+idx]);
+
+  return safe + "\n"; // 末尾换行保证 pre 高度匹配
+}
+
+function highlightHtml(code) {
+  const tokens = [];
+
+  // 提取 <style>...</style> 内容
+  let safe = code.replace(/<style([\s\S]*?)>([\s\S]*?)<\/style>/gi, (m, attrs, css) => {
+    const i = tokens.length;
+    const inner = highlightCss(css);
+    tokens.push(`<span class="hl-tag">&lt;style${escapeHtml(attrs)}&gt;</span>${inner}<span class="hl-tag">&lt;/style&gt;</span>`);
+    return `\x00T${i}\x00`;
+  });
+
+  // 提取 <script>...</script> 内容
+  safe = safe.replace(/<script([\s\S]*?)>([\s\S]*?)<\/script>/gi, (m, attrs, js) => {
+    const i = tokens.length;
+    const inner = highlightCode(js, "javascript");
+    tokens.push(`<span class="hl-tag">&lt;script${escapeHtml(attrs)}&gt;</span>${inner}<span class="hl-tag">&lt;/script&gt;</span>`);
+    return `\x00T${i}\x00`;
+  });
+
+  // HTML 注释
+  safe = safe.replace(/<!--[\s\S]*?-->/g, (m) => {
+    const i = tokens.length;
+    tokens.push(`<span class="hl-comment">${escapeHtml(m)}</span>`);
+    return `\x00T${i}\x00`;
+  });
+
+  // HTML 标签
+  safe = safe.replace(/<\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?\/?>/g, (tag) => {
+    const i = tokens.length;
+    // 高亮标签名和属性
+    let h = escapeHtml(tag);
+    // 标签名
+    h = h.replace(/^(&lt;\/?)([\w-]+)/, '$1<span class="hl-tag">$2</span>');
+    // 属性值
+    h = h.replace(/(=)(&quot;[^&]*?&quot;|&#x27;[^&]*?&#x27;)/g, '$1<span class="hl-value">$2</span>');
+    // 属性名
+    h = h.replace(/\s([\w-]+)(=)/g, ' <span class="hl-attr">$1</span>$2');
+    tokens.push(h);
+    return `\x00T${i}\x00`;
+  });
+
+  safe = escapeHtml(safe);
+  safe = safe.replace(/\x00T(\d+)\x00/g, (_, idx) => tokens[+idx]);
+  return safe + "\n";
+}
+
+function highlightCss(code) {
+  const tokens = [];
+
+  // CSS 注释
+  let safe = code.replace(/\/\*[\s\S]*?\*\//g, (m) => {
+    const i = tokens.length;
+    tokens.push(`<span class="hl-comment">${escapeHtml(m)}</span>`);
+    return `\x00T${i}\x00`;
+  });
+
+  // 字符串
+  safe = safe.replace(/(["'])(?:[^"'\\]|\\.)*?\1/g, (m) => {
+    const i = tokens.length;
+    tokens.push(`<span class="hl-string">${escapeHtml(m)}</span>`);
+    return `\x00T${i}\x00`;
+  });
+
+  safe = escapeHtml(safe);
+
+  // 选择器 (行首的非空白内容直到 {)
+  safe = safe.replace(/(^|\n)([\s]*)([\w.#\-\[\]=~^*:,>\s+]+?)(\s*\{)/g,
+    '$1$2<span class="hl-tag">$3</span>$4');
+
+  // 属性名: 值
+  safe = safe.replace(/([\w-]+)(\s*:)([^;{}]+)/g, (m, prop, colon, val) => {
+    return `<span class="hl-property">${prop}</span>${colon}<span class="hl-value">${val}</span>`;
+  });
+
+  // 数字+单位
+  safe = safe.replace(/\b(\d+\.?\d*)(px|em|rem|%|vh|vw|deg|s|ms)?\b/g,
+    '<span class="hl-number">$1$2</span>');
+
+  safe = safe.replace(/\x00T(\d+)\x00/g, (_, idx) => tokens[+idx]);
+  return safe + "\n";
+}
+
+let highlightTimer = null;
+
+function updateHighlight() {
+  const lang = detectLanguageFromTab();
+  highlightLayer.innerHTML = highlightCode(editor.value, lang);
+}
+
+function scheduleHighlight() {
+  clearTimeout(highlightTimer);
+  highlightTimer = setTimeout(updateHighlight, 30);
+}
+
+// 同步滚动
+editor.addEventListener("scroll", () => {
+  highlightLayer.scrollTop = editor.scrollTop;
+  highlightLayer.scrollLeft = editor.scrollLeft;
+});
+
+// 输入时更新高亮
+editor.addEventListener("input", scheduleHighlight);
 
 // ============ 可拖拽面板 ============
 (function initResizers() {
