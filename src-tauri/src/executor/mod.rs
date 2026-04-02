@@ -4,7 +4,14 @@ use std::path::Path;
 use std::fs;
 use regex::Regex;
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
 use crate::toolchain::ToolchainManager;
+
+/// Windows: 隐藏控制台窗口，防止 GUI 应用弹黑框
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// 代码执行结果
 #[derive(Debug, serde::Serialize)]
@@ -102,11 +109,13 @@ fn execute_python(code: &str, work_dir: &Path, tc: &ToolchainManager) -> ExecRes
 
     let python = tc.python();
     // -u: 禁用 stdout/stderr 缓冲，确保输出能被正确捕获
-    match Command::new(&python)
-        .args(&["-u", src_path.to_str().unwrap()])
+    let mut cmd = Command::new(&python);
+    cmd.args(&["-u", src_path.to_str().unwrap()])
         .env("PYTHONUNBUFFERED", "1")
-        .current_dir(work_dir)
-        .output()
+        .current_dir(work_dir);
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    match cmd.output()
     {
         Ok(output) => ExecResult {
             stdout: String::from_utf8_lossy(&output.stdout).to_string(),
@@ -125,7 +134,11 @@ fn execute_python(code: &str, work_dir: &Path, tc: &ToolchainManager) -> ExecRes
 }
 
 fn run_command(program: &str, args: &[&str]) -> ExecResult {
-    match Command::new(program).args(args).output() {
+    let mut cmd = Command::new(program);
+    cmd.args(args);
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    match cmd.output() {
         Ok(output) => ExecResult {
             stdout: String::from_utf8_lossy(&output.stdout).to_string(),
             stderr: String::from_utf8_lossy(&output.stderr).to_string(),

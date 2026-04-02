@@ -11,13 +11,12 @@ use std::fs;
 ///
 /// 目录结构约定 (toolchains/):
 ///   toolchains/
-///   ├── mingw64/          ← MinGW-w64 精简版
-///   │   └── bin/
-///   │       ├── gcc.exe
-///   │       └── g++.exe
-///   ├── python/           ← Python Embeddable
-///   │   └── python.exe (或 python3)
-///   └── jre/              ← jlink 精简 JRE + javac
+///   ├── mingw64/              ← w64devkit 解压后
+///   │   └── w64devkit/bin/    ← gcc.exe, g++.exe 在这层
+///   │       或 bin/           ← 也兼容直接放 bin/ 的情况
+///   ├── python/               ← Python Embeddable (扁平结构)
+///   │   └── python.exe        ← 直接在 python/ 根目录
+///   └── jre/                  ← jlink 精简 JRE + javac
 ///       └── bin/
 ///           ├── java.exe (或 java)
 ///           └── javac.exe (或 javac)
@@ -61,28 +60,24 @@ impl ToolchainManager {
     /// 获取 C 编译器路径
     /// 优先便携 GCC，回退到系统 gcc，macOS/Linux 再回退到 cc (clang)
     pub fn gcc(&self) -> String {
-        let primary = self.resolve("mingw64", "gcc");
-        if primary != "gcc" {
-            return primary; // 便携版找到了
+        if let Some(path) = self.find_portable("mingw64", "gcc") {
+            return path.to_string_lossy().to_string();
         }
-        // 系统 gcc 存在就用
         if which_exists("gcc") {
             return "gcc".to_string();
         }
-        // macOS/Linux 回退到 cc (通常是 clang)
         #[cfg(not(windows))]
         if which_exists("cc") {
             return "cc".to_string();
         }
-        "gcc".to_string() // 最终回退，让错误信息显示 gcc
+        "gcc".to_string()
     }
 
     /// 获取 C++ 编译器路径
     /// 优先便携 G++，回退到系统 g++，macOS/Linux 再回退到 c++ (clang++)
     pub fn gpp(&self) -> String {
-        let primary = self.resolve("mingw64", "g++");
-        if primary != "g++" {
-            return primary;
+        if let Some(path) = self.find_portable("mingw64", "g++") {
+            return path.to_string_lossy().to_string();
         }
         if which_exists("g++") {
             return "g++".to_string();
@@ -96,16 +91,12 @@ impl ToolchainManager {
 
     /// 获取 Python 解释器路径
     pub fn python(&self) -> String {
-        // 便携版
-        if self.portable_available {
-            let portable = self.bin_path("python", "python");
-            if portable.exists() {
-                return portable.to_string_lossy().to_string();
-            }
-            let portable3 = self.bin_path("python", "python3");
-            if portable3.exists() {
-                return portable3.to_string_lossy().to_string();
-            }
+        // 便携版: 搜索 python 和 python3
+        if let Some(path) = self.find_portable("python", "python") {
+            return path.to_string_lossy().to_string();
+        }
+        if let Some(path) = self.find_portable("python", "python3") {
+            return path.to_string_lossy().to_string();
         }
         // 回退到系统命令
         if which_exists("python3") {
@@ -156,32 +147,64 @@ impl ToolchainManager {
 
     // ---- 内部方法 ----
 
-    /// 拼接 bin 路径: base_dir/<subdir>/bin/<cmd>[.exe]
-    fn bin_path(&self, subdir: &str, cmd: &str) -> PathBuf {
-        let bin_dir = self.base_dir.join(subdir).join("bin");
+    /// 获取可执行文件名（Windows 加 .exe 后缀）
+    fn exe_name(cmd: &str) -> String {
         if cfg!(windows) {
-            bin_dir.join(format!("{}.exe", cmd))
+            format!("{}.exe", cmd)
         } else {
-            bin_dir.join(cmd)
+            cmd.to_string()
         }
+    }
+
+    /// 在 subdir 下搜索可执行文件，兼容多种解压目录结构
+    /// 搜索顺序:
+    ///   base_dir/<subdir>/bin/<cmd>          ← 标准布局
+    ///   base_dir/<subdir>/<cmd>              ← 扁平布局 (Python Embeddable)
+    ///   base_dir/<subdir>/<any>/bin/<cmd>    ← 嵌套布局 (w64devkit 解压后多一层目录)
+    fn find_portable(&self, subdir: &str, cmd: &str) -> Option<PathBuf> {
+        if !self.portable_available {
+            return None;
+        }
+        let exe = Self::exe_name(cmd);
+        let subdir_path = self.base_dir.join(subdir);
+
+        // 1) 标准: subdir/bin/cmd
+        let standard = subdir_path.join("bin").join(&exe);
+        if standard.exists() {
+            return Some(standard);
+        }
+
+        // 2) 扁平: subdir/cmd (Python Embeddable)
+        let flat = subdir_path.join(&exe);
+        if flat.exists() {
+            return Some(flat);
+        }
+
+        // 3) 嵌套: subdir/*/bin/cmd (w64devkit → mingw64/w64devkit/bin/gcc.exe)
+        if let Ok(entries) = fs::read_dir(&subdir_path) {
+            for entry in entries.flatten() {
+                if entry.path().is_dir() {
+                    let nested = entry.path().join("bin").join(&exe);
+                    if nested.exists() {
+                        return Some(nested);
+                    }
+                }
+            }
+        }
+
+        None
     }
 
     /// 解析命令路径：便携版优先，回退到系统命令
     fn resolve(&self, subdir: &str, cmd: &str) -> String {
-        if self.portable_available {
-            let portable = self.bin_path(subdir, cmd);
-            if portable.exists() {
-                return portable.to_string_lossy().to_string();
-            }
+        if let Some(path) = self.find_portable(subdir, cmd) {
+            return path.to_string_lossy().to_string();
         }
         cmd.to_string()
     }
 
     fn is_portable_tool(&self, subdir: &str, cmd: &str) -> bool {
-        if !self.portable_available {
-            return false;
-        }
-        self.bin_path(subdir, cmd).exists()
+        self.find_portable(subdir, cmd).is_some()
     }
 }
 
