@@ -907,8 +907,8 @@ function showAutocomplete(items, prefix, scope) {
   const lineHeight = mirror.offsetHeight;
 
   // 弹窗出现在光标正下方
-  const top = rect.top + padTop + (lines.length - 1) * lineHeight - editor.scrollTop - 25;
-  const left = rect.left + padLeft + textWidth - editor.scrollLeft;
+  const top = rect.top + padTop + (lines.length - 1) * lineHeight - editor.scrollTop - 40;
+  const left = rect.left + padLeft + textWidth - editor.scrollLeft - 180;
 
   autocompletePopup.style.top = Math.min(top, window.innerHeight - 220) + "px";
   autocompletePopup.style.left = Math.min(left, window.innerWidth - 200) + "px";
