@@ -138,6 +138,18 @@ fn run_command(program: &str, args: &[&str]) -> ExecResult {
     cmd.args(args);
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
+
+    // 如果 program 是绝对路径，将其所在目录加入 PATH
+    // 这样 gcc 才能找到同目录下的 as.exe, ld.exe 等工具
+    let prog_path = Path::new(program);
+    if prog_path.is_absolute() {
+        if let Some(bin_dir) = prog_path.parent() {
+            let current_path = std::env::var("PATH").unwrap_or_default();
+            let new_path = format!("{}{}{}", bin_dir.display(), if cfg!(windows) { ";" } else { ":" }, current_path);
+            cmd.env("PATH", new_path);
+        }
+    }
+
     match cmd.output() {
         Ok(output) => ExecResult {
             stdout: String::from_utf8_lossy(&output.stdout).to_string(),
