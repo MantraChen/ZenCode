@@ -579,16 +579,40 @@ function showAutocomplete(items, prefix, scope) {
     autocompletePopup.appendChild(div);
   }
 
-  // 定位
+  // 定位：用隐藏镜像元素精确测量光标位置
   const rect = editor.getBoundingClientRect();
-  const lineHeight = 24;
-  const lines = editor.value.substring(0, editor.selectionStart).split("\n");
-  const currentLine = lines.length;
-  const currentCol = lines[lines.length - 1].length;
+  const style = getComputedStyle(editor);
+  const padTop = parseFloat(style.paddingTop);
+  const padLeft = parseFloat(style.paddingLeft);
 
-  const charWidth = 9;
-  const top = rect.top + currentLine * lineHeight - editor.scrollTop + 4;
-  const left = rect.left + (currentCol - prefix.length) * charWidth + 16;
+  let mirror = document.getElementById("__editor-mirror");
+  if (!mirror) {
+    mirror = document.createElement("div");
+    mirror.id = "__editor-mirror";
+    mirror.style.cssText =
+      "position:absolute;top:-9999px;left:-9999px;visibility:hidden;white-space:pre;pointer-events:none;padding:0;";
+    document.body.appendChild(mirror);
+  }
+  mirror.style.font = style.font;
+  mirror.style.lineHeight = style.lineHeight;
+  mirror.style.letterSpacing = style.letterSpacing;
+  mirror.style.tabSize = style.tabSize;
+
+  const textBeforeCursor = editor.value.substring(0, editor.selectionStart);
+  const lines = textBeforeCursor.split("\n");
+  const currentLineText = lines[lines.length - 1];
+
+  // 测量当前行文本宽度（不含 padding）
+  mirror.textContent = currentLineText;
+  const textWidth = mirror.offsetWidth;
+
+  // 测量行高
+  mirror.textContent = "X";
+  const lineHeight = mirror.offsetHeight;
+
+  // 弹窗出现在光标正下方
+  const top = rect.top + padTop + (lines.length - 1) * lineHeight - editor.scrollTop - 25;
+  const left = rect.left + padLeft + textWidth - editor.scrollLeft;
 
   autocompletePopup.style.top = Math.min(top, window.innerHeight - 220) + "px";
   autocompletePopup.style.left = Math.min(left, window.innerWidth - 200) + "px";

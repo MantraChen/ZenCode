@@ -53,10 +53,9 @@ impl AppState {
         tries.insert("javascript".to_string(), js_trie);
 
         // 初始化工具链管理器
-        // app_data_dir: 存放释放出的便携工具链
-        let app_data_dir = dirs::data_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join("ZenCode");
+        // Windows: 使用 C:\ZenCode 避免中文用户名路径导致 MinGW ld.exe 崩溃
+        // 其他平台: 使用标准 app_data 目录
+        let app_data_dir = get_safe_data_dir();
         std::fs::create_dir_all(&app_data_dir).unwrap_or_default();
 
         let toolchain = ToolchainManager::init(
@@ -69,6 +68,45 @@ impl AppState {
             vfs: VirtualFS::new(),
             toolchain,
         }
+    }
+}
+
+/// 获取安全的数据目录（避免中文路径）
+fn get_safe_data_dir() -> std::path::PathBuf {
+    #[cfg(windows)]
+    {
+        // Windows: 如果用户目录含非 ASCII 字符，使用 C:\ZenCode
+        let default = dirs::data_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("C:\\ZenCode"))
+            .join("ZenCode");
+        if default.to_string_lossy().is_ascii() {
+            default
+        } else {
+            std::path::PathBuf::from("C:\\ZenCode")
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        dirs::data_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("ZenCode")
+    }
+}
+
+/// 获取安全的工作区目录（编译临时文件）
+fn get_safe_workspace_dir() -> std::path::PathBuf {
+    #[cfg(windows)]
+    {
+        let tmp = std::env::temp_dir().join("zencode_workspace");
+        if tmp.to_string_lossy().is_ascii() {
+            tmp
+        } else {
+            std::path::PathBuf::from("C:\\ZenCode\\workspace")
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        std::env::temp_dir().join("zencode_workspace")
     }
 }
 
@@ -91,7 +129,7 @@ fn autocomplete(
 
 #[tauri::command]
 fn run_code(code: &str, language: &str, state: tauri::State<'_, Mutex<AppState>>) -> serde_json::Value {
-    let temp_dir = std::env::temp_dir().join("zencode_workspace");
+    let temp_dir = get_safe_workspace_dir();
     std::fs::create_dir_all(&temp_dir).unwrap_or_default();
 
     let state = state.lock().unwrap();
