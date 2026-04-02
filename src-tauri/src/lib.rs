@@ -5,6 +5,7 @@ mod error_translator;
 mod executor;
 mod vfs;
 mod toolchain;
+mod workspace;
 
 use std::sync::Mutex;
 use trie::Trie;
@@ -12,12 +13,15 @@ use trie::keywords;
 use error_translator::FriendlyError;
 use vfs::{VirtualFS, VfsFileInfo};
 use toolchain::{ToolchainManager, ToolchainStatus};
+use workspace::FsEntry;
 
 /// 全局应用状态
 struct AppState {
     tries: std::collections::HashMap<String, Trie>,
     vfs: VirtualFS,
     toolchain: ToolchainManager,
+    /// 当前打开的真实文件系统工作区路径（非 Web 语言使用）
+    workspace_path: Option<std::path::PathBuf>,
 }
 
 impl AppState {
@@ -67,6 +71,7 @@ impl AppState {
             tries,
             vfs: VirtualFS::new(),
             toolchain,
+            workspace_path: None,
         }
     }
 }
@@ -149,7 +154,113 @@ fn run_code(code: &str, language: &str, state: tauri::State<'_, Mutex<AppState>>
     })
 }
 
-// ============ VFS 文件系统 IPC ============
+/// 根据文件路径自动识别语言并编译运行
+#[tauri::command]
+fn run_file(file_path: &str, stdin_input: Option<String>, state: tauri::State<'_, Mutex<AppState>>) -> serde_json::Value {
+    let path = std::path::Path::new(file_path);
+
+    let language = match path.extension().and_then(|e| e.to_str()) {
+        Some("c") => "c",
+        Some("cpp" | "cc" | "cxx") => "cpp",
+        Some("java") => "java",
+        Some("py") => "python",
+        _ => {
+            return serde_json::json!({
+                "stdout": "",
+                "stderr": format!("不支持的文件类型: {}", file_path),
+                "exitCode": 1,
+                "errors": [],
+            });
+        }
+    };
+
+    // 使用文件所在目录作为工作区
+    let work_dir = path.parent().unwrap_or(std::path::Path::new("."));
+
+    let state = state.lock().unwrap();
+    let result = executor::execute_project_from_dir(work_dir, language, path, stdin_input.as_deref(), &state.toolchain);
+
+    let friendly_errors: Vec<FriendlyError> = if !result.stderr.is_empty() {
+        error_translator::translate_error(&result.stderr, language)
+    } else {
+        vec![]
+    };
+
+    serde_json::json!({
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "exitCode": result.exit_code,
+        "errors": friendly_errors,
+    })
+}
+
+// ============ 工作区 IPC（真实文件系统） ============
+
+#[tauri::command]
+fn ws_open_folder(state: tauri::State<'_, Mutex<AppState>>) -> Option<String> {
+    let folder = workspace::pick_folder()?;
+    let path_str = folder.to_string_lossy().to_string();
+    let mut state = state.lock().unwrap();
+    state.workspace_path = Some(folder);
+    Some(path_str)
+}
+
+#[tauri::command]
+fn ws_set_folder(path: &str, state: tauri::State<'_, Mutex<AppState>>) {
+    let mut state = state.lock().unwrap();
+    state.workspace_path = Some(std::path::PathBuf::from(path));
+}
+
+#[tauri::command]
+fn ws_get_folder(state: tauri::State<'_, Mutex<AppState>>) -> Option<String> {
+    let state = state.lock().unwrap();
+    state.workspace_path.as_ref().map(|p| p.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn ws_list_tree(state: tauri::State<'_, Mutex<AppState>>) -> Vec<FsEntry> {
+    let state = state.lock().unwrap();
+    match &state.workspace_path {
+        Some(p) => workspace::list_tree(p),
+        None => vec![],
+    }
+}
+
+#[tauri::command]
+fn ws_read_file(path: &str) -> Result<String, String> {
+    workspace::read_file(std::path::Path::new(path))
+}
+
+#[tauri::command]
+fn ws_write_file(path: &str, content: &str) -> Result<(), String> {
+    workspace::write_file(std::path::Path::new(path), content)
+}
+
+#[tauri::command]
+fn ws_create_file(name: &str, state: tauri::State<'_, Mutex<AppState>>) -> Result<String, String> {
+    let state = state.lock().unwrap();
+    let dir = state.workspace_path.as_ref().ok_or("未打开项目文件夹")?;
+    workspace::create_file(dir, name)
+}
+
+#[tauri::command]
+fn ws_create_dir(name: &str, state: tauri::State<'_, Mutex<AppState>>) -> Result<String, String> {
+    let state = state.lock().unwrap();
+    let dir = state.workspace_path.as_ref().ok_or("未打开项目文件夹")?;
+    workspace::create_dir(dir, name)
+}
+
+#[tauri::command]
+fn ws_delete(path: &str) -> Result<(), String> {
+    workspace::delete_entry(std::path::Path::new(path))
+}
+
+#[tauri::command]
+fn ws_rename(path: &str, new_name: &str) -> Result<String, String> {
+    workspace::rename_entry(std::path::Path::new(path), new_name)
+}
+
+// ============ VFS 文件系统 IPC（Web 项目专用） ============
 
 #[tauri::command]
 fn vfs_list_files(state: tauri::State<'_, Mutex<AppState>>) -> Vec<VfsFileInfo> {
@@ -198,12 +309,19 @@ fn vfs_create_web_project(state: tauri::State<'_, Mutex<AppState>>) -> Vec<VfsFi
     state.vfs.list_files()
 }
 
+#[tauri::command]
+fn vfs_create_project(language: &str, state: tauri::State<'_, Mutex<AppState>>) -> Vec<VfsFileInfo> {
+    let mut state = state.lock().unwrap();
+    state.vfs.create_project(language);
+    state.vfs.list_files()
+}
+
 // ============ Web 打包器 IPC ============
 
 #[tauri::command]
-fn bundle_web(state: tauri::State<'_, Mutex<AppState>>) -> Result<String, String> {
+fn bundle_web(entry: Option<String>, state: tauri::State<'_, Mutex<AppState>>) -> Result<String, String> {
     let state = state.lock().unwrap();
-    executor::bundle_web_project(state.vfs.all_files())
+    executor::bundle_web_project(state.vfs.all_files(), entry.as_deref())
 }
 
 // ============ 工具链状态 IPC ============
@@ -230,6 +348,19 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             autocomplete,
             run_code,
+            run_file,
+            // 工作区（真实文件系统）
+            ws_open_folder,
+            ws_set_folder,
+            ws_get_folder,
+            ws_list_tree,
+            ws_read_file,
+            ws_write_file,
+            ws_create_file,
+            ws_create_dir,
+            ws_delete,
+            ws_rename,
+            // VFS（Web 项目）
             vfs_list_files,
             vfs_read_file,
             vfs_write_file,
@@ -237,6 +368,7 @@ pub fn run() {
             vfs_rename_file,
             vfs_set_active,
             vfs_create_web_project,
+            vfs_create_project,
             bundle_web,
             toolchain_status,
         ])

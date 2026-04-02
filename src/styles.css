@@ -361,20 +361,54 @@ html, body {
   border-bottom: 1px solid var(--border);
 }
 
-#clear-output {
+.output-header-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#toggle-stdin, #clear-output {
   background: none;
   border: none;
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 12px;
   padding: 2px 6px;
   border-radius: 4px;
 }
 
-#clear-output:hover {
+#toggle-stdin:hover, #clear-output:hover {
   background: var(--bg-surface);
   color: var(--text-primary);
 }
+
+#toggle-stdin.active {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+.stdin-area {
+  border-bottom: 1px solid var(--border);
+  padding: 4px 8px;
+  background: var(--bg-primary);
+}
+
+.stdin-area.hidden { display: none; }
+
+#stdin-input {
+  width: 100%;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: "Cascadia Code", "Fira Code", monospace;
+  font-size: 13px;
+  padding: 6px 8px;
+  resize: vertical;
+  outline: none;
+}
+
+#stdin-input:focus { border-color: var(--accent); }
 
 #output-content {
   flex: 1;
@@ -509,6 +543,37 @@ html, body {
 
 .resizer.hidden {
   display: none;
+}
+
+/* ======== 右键菜单 ======== */
+.context-menu {
+  position: fixed;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  min-width: 160px;
+  padding: 4px 0;
+  z-index: 300;
+}
+
+.context-menu-item {
+  padding: 6px 16px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.context-menu-item:hover {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+.context-menu-separator {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
 }
 
 /* ======== 滚动条 ======== */

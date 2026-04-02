@@ -51,19 +51,15 @@ impl Trie {
             }
         }
 
-        // 从该节点 DFS 收集所有完整词
         let mut results = Vec::new();
         let mut current_word = prefix.to_string();
         Self::collect(node, &mut current_word, &mut results);
         results
     }
-
-    /// DFS 递归收集所有以当前路径为前缀的完整词
     fn collect(node: &TrieNode, current: &mut String, results: &mut Vec<String>) {
         if node.is_end {
             results.push(current.clone());
         }
-        // 按字母序遍历，保证输出有序
         let mut keys: Vec<char> = node.children.keys().copied().collect();
         keys.sort_unstable();
         for ch in keys {

@@ -99,6 +99,54 @@ impl VirtualFS {
         &self.files
     }
 
+    /// 清空所有文件
+    pub fn clear(&mut self) {
+        self.files.clear();
+        self.active_file = None;
+    }
+
+    /// 根据语言创建项目模板
+    pub fn create_project(&mut self, language: &str) {
+        self.clear();
+        match language {
+            "c" => {
+                self.write_file("main.c", r#"#include <stdio.h>
+
+int main() {
+    printf("Hello, World!\n");
+    return 0;
+}"#);
+                self.active_file = Some("main.c".to_string());
+            }
+            "cpp" => {
+                self.write_file("main.cpp", r#"#include <iostream>
+using namespace std;
+
+int main() {
+    cout << "Hello, World!" << endl;
+    return 0;
+}"#);
+                self.active_file = Some("main.cpp".to_string());
+            }
+            "java" => {
+                self.write_file("Main.java", r#"public class Main {
+    public static void main(String[] args) {
+        System.out.println("Hello, World!");
+    }
+}"#);
+                self.active_file = Some("Main.java".to_string());
+            }
+            "python" => {
+                self.write_file("main.py", "print(\"Hello, World!\")");
+                self.active_file = Some("main.py".to_string());
+            }
+            "web" => {
+                self.create_web_project();
+            }
+            _ => {}
+        }
+    }
+
     /// 一键生成 Web 项目模板
     pub fn create_web_project(&mut self) {
         self.write_file(

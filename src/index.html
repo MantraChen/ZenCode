@@ -12,10 +12,7 @@
     <div class="toolbar-left">
       <span class="logo">ZenCode</span>
       <select id="language-select">
-        <option value="c">C</option>
-        <option value="cpp">C++</option>
-        <option value="java">Java</option>
-        <option value="python" selected>Python</option>
+        <option value="project" selected>Project</option>
         <option value="web">Web Project</option>
       </select>
     </div>
@@ -31,7 +28,8 @@
       <div class="sidebar-header">
         <span>Explorer</span>
         <div class="sidebar-actions">
-          <button id="new-file-btn" title="新建文件">+</button>
+          <button id="new-file-btn" title="新建文件">&#43;</button>
+          <button id="new-folder-btn" title="新建文件夹">&#128193;</button>
         </div>
       </div>
       <div id="file-tree" class="file-tree"></div>
@@ -58,7 +56,13 @@
         <div class="output-pane">
           <div class="output-header">
             <span>输出</span>
-            <button id="clear-output" title="清空输出">&#10005;</button>
+            <div class="output-header-right">
+              <button id="toggle-stdin" title="输入数据 (stdin)">stdin</button>
+              <button id="clear-output" title="清空输出">&#10005;</button>
+            </div>
+          </div>
+          <div id="stdin-area" class="stdin-area hidden">
+            <textarea id="stdin-input" placeholder="程序运行前会读取此处的输入 (stdin)..." rows="3"></textarea>
           </div>
           <pre id="output-content"></pre>
         </div>

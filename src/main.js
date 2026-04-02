@@ -6,181 +6,288 @@ const langSelect = document.getElementById("language-select");
 const runBtn = document.getElementById("run-btn");
 const outputContent = document.getElementById("output-content");
 const clearOutputBtn = document.getElementById("clear-output");
+const toggleStdinBtn = document.getElementById("toggle-stdin");
+const stdinArea = document.getElementById("stdin-area");
+const stdinInput = document.getElementById("stdin-input");
 const autocompletePopup = document.getElementById("autocomplete-popup");
 const webPreview = document.getElementById("web-preview");
 const sidebar = document.getElementById("sidebar");
 const fileTree = document.getElementById("file-tree");
 const tabBar = document.getElementById("tab-bar");
 const newFileBtn = document.getElementById("new-file-btn");
+const newFolderBtn = document.getElementById("new-folder-btn");
 
 // ============ 状态 ============
 let selectedIndex = -1;
 let completionItems = [];
 let debounceTimer = null;
 
-// Web 项目模式状态
+// 模式状态
 let isWebMode = false;
-let openTabs = [];       // 当前打开的 tab 文件名列表
-let activeTab = null;    // 当前活动 tab
-
-// ============ 默认代码模板 ============
-const templates = {
-  c: '#include <stdio.h>\n\nint main() {\n    printf("Hello, World!\\n");\n    return 0;\n}',
-  cpp: '#include <iostream>\nusing namespace std;\n\nint main() {\n    cout << "Hello, World!" << endl;\n    return 0;\n}',
-  java: 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, World!");\n    }\n}',
-  python: 'print("Hello, World!")',
-};
+let openTabs = [];       // 当前打开的 tab: { name, path }（web 模式 path 为 null）
+let activeTab = null;    // 当前活动 tab 的 path（web 模式为文件名）
+let activeTabName = null; // 当前活动 tab 的显示名
 
 // ============ 初始化 ============
-window.addEventListener("DOMContentLoaded", () => {
-  editor.value = templates[langSelect.value] || "";
-  editor.focus();
+window.addEventListener("DOMContentLoaded", async () => {
+  await switchMode(langSelect.value);
 });
 
-// ============ 语言切换 ============
+// ============ 模式切换 ============
 langSelect.addEventListener("change", async () => {
-  const lang = langSelect.value;
   hideAutocomplete();
   outputContent.innerHTML = "";
   webPreview.classList.add("hidden");
-
-  if (lang === "web") {
-    await enterWebMode();
-  } else {
-    exitWebMode();
-    editor.value = templates[lang] || "";
-  }
+  document.getElementById("preview-resizer").classList.add("hidden");
+  document.querySelector(".editor-area").style.flex = "";
+  document.querySelector(".editor-area").style.width = "";
+  await switchMode(langSelect.value);
 });
 
-// ============ Web 项目模式 ============
-async function enterWebMode() {
-  isWebMode = true;
+async function switchMode(mode) {
+  isWebMode = (mode === "web");
+  showSidebar();
+
+  if (isWebMode) {
+    await enterWebMode();
+  } else {
+    await enterProjectMode();
+  }
+}
+
+async function enterProjectMode() {
+  // 尝试加载已打开的工作区
+  const existing = await invoke("ws_get_folder");
+  if (existing) {
+    await refreshRealFileTree();
+  } else {
+    openTabs = [];
+    activeTab = null;
+    activeTabName = null;
+    tabBar.innerHTML = "";
+    editor.value = "";
+    showOpenFolderHint();
+  }
+}
+
+function showOpenFolderHint() {
+  fileTree.innerHTML = '<div class="file-item" id="open-folder-hint" style="color:var(--text-secondary);padding:12px;font-size:13px;cursor:pointer;">点击此处打开项目文件夹...</div>';
+  document.getElementById("open-folder-hint")?.addEventListener("click", openWorkspaceFolder);
+}
+
+function showSidebar() {
   sidebar.classList.remove("hidden");
   document.getElementById("sidebar-resizer").classList.remove("hidden");
   tabBar.classList.remove("hidden");
+}
 
-  // 在后端创建 Web 项目模板
+// ============ Web 项目模式（VFS 内存） ============
+async function enterWebMode() {
+  isWebMode = true;
+  showSidebar();
+
   const files = await invoke("vfs_create_web_project");
-  renderFileTree(files);
+  renderVfsFileTree(files);
 
-  // 打开 index.html
-  openTabs = ["index.html"];
+  openTabs = [{ name: "index.html", path: null }];
   activeTab = "index.html";
-  await loadFile("index.html");
+  activeTabName = "index.html";
+  await loadVfsFile("index.html");
   renderTabs();
 }
 
-function exitWebMode() {
-  isWebMode = false;
-  sidebar.classList.add("hidden");
-  document.getElementById("sidebar-resizer").classList.add("hidden");
-  tabBar.classList.add("hidden");
-  webPreview.classList.add("hidden");
-  document.getElementById("preview-resizer").classList.add("hidden");
-  // 恢复 editor-area 的 flex
-  document.querySelector(".editor-area").style.flex = "";
-  document.querySelector(".editor-area").style.width = "";
+// ============ 打开真实文件夹 ============
+async function openWorkspaceFolder() {
+  const folder = await invoke("ws_open_folder");
+  if (!folder) return; // 用户取消了
+
   openTabs = [];
   activeTab = null;
-  fileTree.innerHTML = "";
+  activeTabName = null;
+  editor.value = "";
   tabBar.innerHTML = "";
+  await refreshRealFileTree();
+}
+
+async function refreshRealFileTree() {
+  const tree = await invoke("ws_list_tree");
+  renderRealFileTree(tree);
 }
 
 // ============ 文件树渲染 ============
-function getFileIcon(ext) {
-  const icons = {
-    html: "&#9776;",
-    css: "&#9733;",
-    js: "&#9883;",
-    c: "C",
-    cpp: "C+",
-    java: "J",
-    py: "Py",
-  };
+function getFileIcon(name) {
+  const ext = name.split(".").pop().toLowerCase();
+  const icons = { html: "&#9776;", css: "&#9733;", js: "&#9883;", c: "C", cpp: "C+", h: "H", java: "J", py: "Py" };
   return icons[ext] || "&#9634;";
 }
 
-function renderFileTree(files) {
+// --- VFS 文件树（Web 项目） ---
+function renderVfsFileTree(files) {
   fileTree.innerHTML = "";
   for (const file of files) {
     const div = document.createElement("div");
     div.className = "file-item" + (file.name === activeTab ? " active" : "");
     div.innerHTML = `
-      <span class="file-icon">${getFileIcon(file.extension)}</span>
+      <span class="file-icon">${getFileIcon(file.name)}</span>
       <span class="file-name">${file.name}</span>
       <button class="file-delete" title="删除">&#10005;</button>
     `;
-
-    div.querySelector(".file-name").addEventListener("click", () => openFile(file.name));
+    div.querySelector(".file-name").addEventListener("click", () => openVfsFile(file.name));
     div.querySelector(".file-delete").addEventListener("click", (e) => {
       e.stopPropagation();
-      deleteFile(file.name);
+      deleteVfsFile(file.name);
     });
-
     fileTree.appendChild(div);
   }
 }
 
-async function refreshFileTree() {
-  const files = await invoke("vfs_list_files");
-  renderFileTree(files);
-}
-
-// ============ 文件操作 ============
-async function openFile(name) {
-  // 先保存当前文件
-  await saveCurrentFile();
-
-  // 加载目标文件
-  await loadFile(name);
-
-  // 更新 tab
-  if (!openTabs.includes(name)) {
-    openTabs.push(name);
+// --- 真实文件树（非 Web 语言） ---
+function renderRealFileTree(entries, container, depth) {
+  if (!container) {
+    fileTree.innerHTML = "";
+    // 打开文件夹按钮
+    const openBtn = document.createElement("div");
+    openBtn.className = "file-item";
+    openBtn.style.color = "var(--accent)";
+    openBtn.style.fontSize = "12px";
+    openBtn.innerHTML = '<span class="file-icon">&#128193;</span><span class="file-name">打开文件夹...</span>';
+    openBtn.addEventListener("click", openWorkspaceFolder);
+    fileTree.appendChild(openBtn);
+    container = fileTree;
+    depth = 0;
   }
-  activeTab = name;
-  renderTabs();
-  await refreshFileTree();
+
+  for (const entry of entries) {
+    const div = document.createElement("div");
+    div.className = "file-item" + (entry.path === activeTab ? " active" : "");
+    div.style.paddingLeft = (12 + depth * 16) + "px";
+
+    if (entry.is_dir) {
+      div.innerHTML = `<span class="file-icon">&#9656;</span><span class="file-name">${entry.name}</span>`;
+      const childContainer = document.createElement("div");
+      childContainer.className = "file-tree-children";
+      let expanded = true;
+
+      div.addEventListener("click", () => {
+        expanded = !expanded;
+        childContainer.style.display = expanded ? "" : "none";
+        div.querySelector(".file-icon").innerHTML = expanded ? "&#9662;" : "&#9656;";
+      });
+      div.addEventListener("contextmenu", (e) => showContextMenu(e, entry));
+
+      container.appendChild(div);
+      container.appendChild(childContainer);
+      renderRealFileTree(entry.children, childContainer, depth + 1);
+    } else {
+      div.innerHTML = `
+        <span class="file-icon">${getFileIcon(entry.name)}</span>
+        <span class="file-name">${entry.name}</span>
+      `;
+      div.addEventListener("click", () => openRealFile(entry.path, entry.name));
+      div.addEventListener("contextmenu", (e) => showContextMenu(e, entry));
+      container.appendChild(div);
+    }
+  }
 }
 
-async function loadFile(name) {
+async function refreshFileTree() {
+  if (isWebMode) {
+    const files = await invoke("vfs_list_files");
+    renderVfsFileTree(files);
+  } else {
+    await refreshRealFileTree();
+  }
+}
+
+// ============ VFS 文件操作（Web 模式） ============
+async function openVfsFile(name) {
+  await saveCurrentFile();
   const content = await invoke("vfs_read_file", { name });
   editor.value = content || "";
   activeTab = name;
+  activeTabName = name;
   await invoke("vfs_set_active", { name });
-}
 
-async function saveCurrentFile() {
-  if (activeTab && isWebMode) {
-    await invoke("vfs_write_file", {
-      name: activeTab,
-      content: editor.value,
-    });
+  if (!openTabs.find(t => t.name === name)) {
+    openTabs.push({ name, path: null });
   }
-}
-
-async function deleteFile(name) {
-  if (!confirm(`确定要删除 ${name} 吗？`)) return;
-
-  await invoke("vfs_delete_file", { name });
-
-  // 从 tabs 中移除
-  openTabs = openTabs.filter((t) => t !== name);
-  if (activeTab === name) {
-    activeTab = openTabs[0] || null;
-    if (activeTab) {
-      await loadFile(activeTab);
-    } else {
-      editor.value = "";
-    }
-  }
-
   renderTabs();
   await refreshFileTree();
 }
 
+async function loadVfsFile(name) {
+  const content = await invoke("vfs_read_file", { name });
+  editor.value = content || "";
+  activeTab = name;
+  activeTabName = name;
+  await invoke("vfs_set_active", { name });
+}
+
+function deleteVfsFile(name) {
+  showConfirmDialog(`确定要删除 ${name} 吗？`, async () => {
+    await invoke("vfs_delete_file", { name });
+    openTabs = openTabs.filter(t => t.name !== name);
+    if (activeTab === name) {
+      activeTab = openTabs.length > 0 ? (openTabs[0].path || openTabs[0].name) : null;
+      activeTabName = openTabs.length > 0 ? openTabs[0].name : null;
+      if (activeTab && isWebMode) await loadVfsFile(activeTab);
+      else editor.value = "";
+    }
+    renderTabs();
+    await refreshFileTree();
+  });
+}
+
+// ============ 真实文件操作（非 Web 模式） ============
+async function openRealFile(path, name) {
+  await saveCurrentFile();
+  try {
+    const content = await invoke("ws_read_file", { path });
+    editor.value = content;
+    activeTab = path;
+    activeTabName = name;
+
+    if (!openTabs.find(t => t.path === path)) {
+      openTabs.push({ name, path });
+    }
+    renderTabs();
+    await refreshFileTree();
+  } catch (err) {
+    outputContent.innerHTML = `<span class="output-error">无法读取文件: ${err}</span>`;
+  }
+}
+
+// ============ 通用保存 ============
+async function saveCurrentFile() {
+  if (!activeTab) return;
+  if (isWebMode) {
+    await invoke("vfs_write_file", { name: activeTab, content: editor.value });
+  } else {
+    try {
+      await invoke("ws_write_file", { path: activeTab, content: editor.value });
+    } catch (err) {
+      // 静默失败（可能还没打开文件）
+    }
+  }
+}
+
 // 新建文件
-newFileBtn.addEventListener("click", () => showNewFileDialog());
+newFileBtn.addEventListener("click", () => {
+  if (isWebMode) {
+    showNewFileDialog();
+  } else {
+    showNewRealItemDialog("file");
+  }
+});
+
+// 新建文件夹
+newFolderBtn.addEventListener("click", () => {
+  if (isWebMode) {
+    showNewFileDialog(); // Web 模式只有文件
+  } else {
+    showNewRealItemDialog("folder");
+  }
+});
 
 function showNewFileDialog() {
   const overlay = document.createElement("div");
@@ -212,7 +319,7 @@ function showNewFileDialog() {
     if (!name) return;
     await invoke("vfs_write_file", { name, content: "" });
     close();
-    await openFile(name);
+    await openVfsFile(name);
     await refreshFileTree();
   };
 
@@ -223,23 +330,72 @@ function showNewFileDialog() {
   });
 }
 
+function showNewRealItemDialog(type) {
+  const isFolder = type === "folder";
+  const overlay = document.createElement("div");
+  overlay.className = "dialog-overlay";
+  overlay.innerHTML = `
+    <div class="dialog">
+      <h3>新建${isFolder ? "文件夹" : "文件"}</h3>
+      <input type="text" id="new-file-input" placeholder="${isFolder ? "文件夹名" : "文件名 (如 utils.c)"}" autofocus />
+      <div class="dialog-buttons">
+        <button id="dialog-cancel">取消</button>
+        <button id="dialog-confirm" class="primary">创建</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const input = overlay.querySelector("#new-file-input");
+  input.focus();
+  const close = () => overlay.remove();
+  overlay.querySelector("#dialog-cancel").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+
+  const doCreate = async () => {
+    const name = input.value.trim();
+    if (!name) return;
+    close();
+    try {
+      if (isFolder) {
+        await invoke("ws_create_dir", { name });
+      } else {
+        const path = await invoke("ws_create_file", { name });
+        await openRealFile(path, name);
+      }
+      await refreshFileTree();
+    } catch (err) {
+      outputContent.innerHTML = `<span class="output-error">${err}</span>`;
+    }
+  };
+
+  overlay.querySelector("#dialog-confirm").addEventListener("click", doCreate);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") doCreate();
+    if (e.key === "Escape") close();
+  });
+}
+
 // ============ Tab 栏 ============
 function renderTabs() {
   tabBar.innerHTML = "";
-  for (const name of openTabs) {
+  for (const t of openTabs) {
     const tab = document.createElement("div");
-    tab.className = "tab-item" + (name === activeTab ? " active" : "");
+    const tabId = t.path || t.name;
+    tab.className = "tab-item" + (tabId === activeTab ? " active" : "");
 
     const label = document.createElement("span");
-    label.textContent = name;
-    label.addEventListener("click", () => openFile(name));
+    label.textContent = t.name;
+    label.addEventListener("click", () => {
+      if (isWebMode) openVfsFile(t.name);
+      else if (t.path) openRealFile(t.path, t.name);
+    });
 
     const closeBtn = document.createElement("button");
     closeBtn.className = "tab-close";
     closeBtn.innerHTML = "&#10005;";
     closeBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      closeTab(name);
+      closeTab(tabId);
     });
 
     tab.appendChild(label);
@@ -248,14 +404,17 @@ function renderTabs() {
   }
 }
 
-async function closeTab(name) {
+async function closeTab(id) {
   await saveCurrentFile();
-  openTabs = openTabs.filter((t) => t !== name);
-  if (activeTab === name) {
-    activeTab = openTabs[openTabs.length - 1] || null;
-    if (activeTab) {
-      await loadFile(activeTab);
+  openTabs = openTabs.filter(t => (t.path || t.name) !== id);
+  if (activeTab === id) {
+    const last = openTabs[openTabs.length - 1];
+    if (last) {
+      if (isWebMode) await openVfsFile(last.name);
+      else if (last.path) await openRealFile(last.path, last.name);
     } else {
+      activeTab = null;
+      activeTabName = null;
       editor.value = "";
     }
   }
@@ -278,11 +437,22 @@ async function runCode() {
     return;
   }
 
-  const code = editor.value;
-  const language = langSelect.value;
+  // 先保存当前编辑的文件
+  await saveCurrentFile();
 
-  if (!code.trim()) {
-    outputContent.innerHTML = '<span class="output-error">请先写一些代码再运行。</span>';
+  if (!activeTab) {
+    outputContent.innerHTML = '<span class="output-error">请先打开一个文件再运行。</span>';
+    return;
+  }
+
+  // 自动检测代码是否需要 stdin 输入
+  const code = editor.value;
+  const needsInput = /\bScanner\b|\bBufferedReader\b|\bscanf\b|\bgets\b|\bfgets\b|\bgetline\b|\bcinput\(\b|\binput\s*\(|\bcin\b/.test(code);
+  if (needsInput && !stdinInput.value && stdinArea.classList.contains("hidden")) {
+    stdinArea.classList.remove("hidden");
+    toggleStdinBtn.classList.add("active");
+    stdinInput.focus();
+    outputContent.innerHTML = '<span class="output-friendly">检测到程序需要输入数据，请在上方 stdin 区域填入输入内容后再次运行。</span>';
     return;
   }
 
@@ -291,7 +461,10 @@ async function runCode() {
   outputContent.innerHTML = '<span class="output-stdout">正在编译运行...</span>';
 
   try {
-    const result = await invoke("run_code", { code, language });
+    // stdin: 如果用户填了内容就传给后端，自动追加换行确保最后一行能被读到
+    let stdinText = stdinInput.value;
+    if (stdinText && !stdinText.endsWith("\n")) stdinText += "\n";
+    const result = await invoke("run_file", { filePath: activeTab, stdinInput: stdinText || null });
     outputContent.innerHTML = "";
 
     if (result.errors && result.errors.length > 0) {
@@ -330,8 +503,9 @@ async function runWebProject() {
   await saveCurrentFile();
 
   try {
-    // 调用 Rust 内存打包器
-    const bundledHtml = await invoke("bundle_web");
+    // 调用 Rust 内存打包器，以当前活动的 HTML 文件为入口
+    const entry = activeTab && activeTab.endsWith(".html") ? activeTab : null;
+    const bundledHtml = await invoke("bundle_web", { entry });
 
     // 使用 Blob URL 安全渲染
     const blob = new Blob([bundledHtml], { type: "text/html" });
@@ -367,6 +541,12 @@ window.addEventListener("message", (e) => {
     span.textContent = (level === "log" ? "" : "[" + level + "] ") + e.data.text + "\n";
     outputContent.appendChild(span);
   }
+});
+
+// ============ Stdin 切换 ============
+toggleStdinBtn.addEventListener("click", () => {
+  stdinArea.classList.toggle("hidden");
+  toggleStdinBtn.classList.toggle("active");
 });
 
 // ============ 清空输出 ============
@@ -508,14 +688,8 @@ async function handleAutocomplete() {
 
   const prefix = match[0];
 
-  // 确定补全语言/作用域
-  let language;
-  if (isWebMode) {
-    // Web 项目模式：根据文件扩展名 + Scope Sniffer 判定
-    language = getLanguageForAutocomplete();
-  } else {
-    language = langSelect.value;
-  }
+  // 根据当前文件扩展名确定补全语言
+  let language = detectLanguageFromTab();
 
   try {
     const results = await invoke("autocomplete", { prefix, language });
@@ -538,17 +712,21 @@ async function handleAutocomplete() {
  *   - .js 文件 → javascript
  *   - .html 文件 → 使用 Scope Sniffer 判断
  */
-function getLanguageForAutocomplete() {
-  if (!activeTab) return "html";
-
-  const ext = activeTab.split(".").pop().toLowerCase();
-  if (ext === "css") return "css";
-  if (ext === "js") return "javascript";
-  if (ext === "html" || ext === "htm") {
+/// 根据当前打开的文件扩展名检测语言（用于补全和运行）
+function detectLanguageFromTab() {
+  const name = activeTabName || activeTab || "";
+  const ext = name.split(".").pop().toLowerCase();
+  const map = { c: "c", h: "c", cpp: "cpp", cc: "cpp", cxx: "cpp", hpp: "cpp", java: "java", py: "python",
+    js: "javascript", css: "css", html: "html", htm: "html" };
+  const lang = map[ext];
+  if (lang) {
     // HTML 文件使用 Scope Sniffer
-    return detectScope(editor.value, editor.selectionStart);
+    if ((ext === "html" || ext === "htm") && isWebMode) {
+      return detectScope(editor.value, editor.selectionStart);
+    }
+    return lang;
   }
-  return "html";
+  return "python"; // 默认
 }
 
 function showAutocomplete(items, prefix, scope) {
@@ -648,6 +826,207 @@ function applyCompletion(word) {
   editor.selectionStart = editor.selectionEnd = prefixStart + word.length;
   editor.focus();
   hideAutocomplete();
+}
+
+// ============ 右键上下文菜单 ============
+let contextMenu = null;
+
+function showContextMenu(e, entry) {
+  e.preventDefault();
+  e.stopPropagation();
+  hideContextMenu();
+
+  const workspacePath = null; // 延迟获取
+
+  contextMenu = document.createElement("div");
+  contextMenu.className = "context-menu";
+
+  const items = [];
+
+  if (!entry.is_dir) {
+    items.push({ label: "打开", action: () => openRealFile(entry.path, entry.name) });
+  }
+  items.push({ label: "重命名", action: () => showRenameDialog(entry) });
+  items.push({ label: "删除", action: () => deleteEntry(entry) });
+  items.push({ type: "separator" });
+  items.push({ label: "复制路径", action: () => copyToClipboard(entry.path) });
+  items.push({
+    label: "复制相对路径",
+    action: async () => {
+      const wsPath = await invoke("ws_get_folder");
+      if (wsPath && entry.path.startsWith(wsPath)) {
+        let rel = entry.path.slice(wsPath.length);
+        if (rel.startsWith("/") || rel.startsWith("\\")) rel = rel.slice(1);
+        copyToClipboard(rel);
+      } else {
+        copyToClipboard(entry.path);
+      }
+    }
+  });
+
+  for (const item of items) {
+    if (item.type === "separator") {
+      const sep = document.createElement("div");
+      sep.className = "context-menu-separator";
+      contextMenu.appendChild(sep);
+    } else {
+      const div = document.createElement("div");
+      div.className = "context-menu-item";
+      div.textContent = item.label;
+      div.addEventListener("click", () => {
+        hideContextMenu();
+        item.action();
+      });
+      contextMenu.appendChild(div);
+    }
+  }
+
+  document.body.appendChild(contextMenu);
+
+  // 定位，避免超出窗口
+  const menuRect = contextMenu.getBoundingClientRect();
+  let top = e.clientY;
+  let left = e.clientX;
+  if (top + menuRect.height > window.innerHeight) top = window.innerHeight - menuRect.height - 4;
+  if (left + menuRect.width > window.innerWidth) left = window.innerWidth - menuRect.width - 4;
+  contextMenu.style.top = top + "px";
+  contextMenu.style.left = left + "px";
+}
+
+function hideContextMenu() {
+  if (contextMenu) {
+    contextMenu.remove();
+    contextMenu = null;
+  }
+}
+
+document.addEventListener("click", hideContextMenu);
+document.addEventListener("contextmenu", (e) => {
+  // 只在非文件树区域关闭菜单
+  if (!e.target.closest(".context-menu")) hideContextMenu();
+});
+
+function deleteEntry(entry) {
+  const type = entry.is_dir ? "文件夹" : "文件";
+  showConfirmDialog(`确定要删除${type} "${entry.name}" 吗？`, async () => {
+    try {
+      // 先把 activeTab 清掉，防止 openRealFile → saveCurrentFile 把刚删的文件重新写回去
+      const wasActive = (activeTab === entry.path);
+      if (wasActive) {
+        activeTab = null;
+        activeTabName = null;
+      }
+      // 也要从 tabs 中移除被删项（以及子路径）
+      openTabs = openTabs.filter(t => {
+        if (!t.path) return true;
+        return t.path !== entry.path && !t.path.startsWith(entry.path + "/") && !t.path.startsWith(entry.path + "\\");
+      });
+
+      await invoke("ws_delete", { path: entry.path });
+
+      // 切到剩余的最后一个 tab
+      if (wasActive) {
+        const last = openTabs[openTabs.length - 1];
+        if (last && last.path) {
+          await openRealFile(last.path, last.name);
+        } else {
+          editor.value = "";
+          renderTabs();
+        }
+      }
+      await refreshFileTree();
+    } catch (err) {
+      outputContent.innerHTML = `<span class="output-error">删除失败: ${err}</span>`;
+    }
+  });
+}
+
+function showConfirmDialog(message, onConfirm) {
+  const overlay = document.createElement("div");
+  overlay.className = "dialog-overlay";
+  overlay.innerHTML = `
+    <div class="dialog">
+      <h3>${message}</h3>
+      <div class="dialog-buttons">
+        <button id="dialog-cancel">取消</button>
+        <button id="dialog-confirm" class="primary">确定</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector("#dialog-cancel").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  overlay.querySelector("#dialog-confirm").addEventListener("click", () => {
+    close();
+    onConfirm();
+  });
+}
+
+function showRenameDialog(entry) {
+  const overlay = document.createElement("div");
+  overlay.className = "dialog-overlay";
+  overlay.innerHTML = `
+    <div class="dialog">
+      <h3>重命名</h3>
+      <input type="text" id="rename-input" value="${entry.name}" autofocus />
+      <div class="dialog-buttons">
+        <button id="dialog-cancel">取消</button>
+        <button id="dialog-confirm" class="primary">确定</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const input = overlay.querySelector("#rename-input");
+  // 选中文件名（不含扩展名）
+  const dotIdx = entry.name.lastIndexOf(".");
+  input.setSelectionRange(0, dotIdx > 0 ? dotIdx : entry.name.length);
+  input.focus();
+
+  const close = () => overlay.remove();
+  overlay.querySelector("#dialog-cancel").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+
+  const doRename = async () => {
+    const newName = input.value.trim();
+    if (!newName || newName === entry.name) { close(); return; }
+    close();
+    try {
+      const newPath = await invoke("ws_rename", { path: entry.path, newName });
+      // 更新已打开的 tab
+      const tab = openTabs.find(t => t.path === entry.path);
+      if (tab) {
+        tab.path = newPath;
+        tab.name = newName;
+        if (activeTab === entry.path) {
+          activeTab = newPath;
+          activeTabName = newName;
+        }
+        renderTabs();
+      }
+      await refreshFileTree();
+    } catch (err) {
+      outputContent.innerHTML = `<span class="output-error">${err}</span>`;
+    }
+  };
+
+  overlay.querySelector("#dialog-confirm").addEventListener("click", doRename);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") doRename();
+    if (e.key === "Escape") close();
+  });
+}
+
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).catch(() => {
+    // fallback
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  });
 }
 
 // ============ 可拖拽面板 ============
