@@ -1194,156 +1194,189 @@ function highlightCode(code, lang) {
   const rules = HIGHLIGHT_RULES[lang];
   if (!rules) return escapeHtml(code) + "\n";
 
-  // 先提取字符串和注释，用占位符替换
-  const tokens = [];
-  let safe = code;
-
-  // 提取多行注释 /* ... */
-  safe = safe.replace(/\/\*[\s\S]*?\*\//g, (m) => {
-    const i = tokens.length;
-    tokens.push(`<span class="hl-comment">${escapeHtml(m)}</span>`);
-    return `\x00T${i}\x00`;
-  });
-
-  // 提取单行注释 // ... 和 # ... (python)
-  const commentRe = (lang === "python") ? /#[^\n]*/g : /\/\/[^\n]*/g;
-  safe = safe.replace(commentRe, (m) => {
-    const i = tokens.length;
-    tokens.push(`<span class="hl-comment">${escapeHtml(m)}</span>`);
-    return `\x00T${i}\x00`;
-  });
-
-  // 提取字符串 "..." '...' `...`
-  safe = safe.replace(/("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g, (m) => {
-    const i = tokens.length;
-    tokens.push(`<span class="hl-string">${escapeHtml(m)}</span>`);
-    return `\x00T${i}\x00`;
-  });
-
-  // 转义 HTML
-  safe = escapeHtml(safe);
-
+  // 逐 token 扫描，每段文本只着色一次，不会出现 span 嵌套问题
+  // 构建一个大正则，用命名捕获区分 token 类型
+  const parts = [];
+  // 多行注释
+  parts.push("(?<comment_ml>\\/\\*[\\s\\S]*?\\*\\/)");
+  // 单行注释
+  if (lang === "python") {
+    parts.push("(?<comment_sl>#[^\\n]*)");
+  } else {
+    parts.push("(?<comment_sl>\\/\\/[^\\n]*)");
+  }
+  // 字符串
+  if (lang === "python") {
+    parts.push('(?<string>"""[\\s\\S]*?"""|\'\'\'[\\s\\S]*?\'\'\'|"(?:[^"\\\\\\n]|\\\\.)*"|\'(?:[^\'\\\\\\n]|\\\\.)*\')');
+  } else if (lang === "javascript") {
+    parts.push('(?<string>"(?:[^"\\\\\\n]|\\\\.)*"|\'(?:[^\'\\\\\\n]|\\\\.)*\'|`(?:[^`\\\\]|\\\\.)*`)');
+  } else {
+    parts.push('(?<string>"(?:[^"\\\\\\n]|\\\\.)*"|\'(?:[^\'\\\\\\n]|\\\\.)*\')');
+  }
   // 数字
-  safe = safe.replace(/\b(\d+\.?\d*(?:[eE][+-]?\d+)?[fFlLdD]?|0[xX][0-9a-fA-F]+[lL]?|0[bB][01]+[lL]?)\b/g,
-    '<span class="hl-number">$1</span>');
-
-  // 函数调用: word(
-  safe = safe.replace(/\b([a-zA-Z_]\w*)(\s*\()/g, (m, name, paren) => {
-    // 如果已经是关键字就不标注为函数
-    if (rules.keywords && rules.keywords.test(name)) {
-      rules.keywords.lastIndex = 0;
-      return m;
-    }
-    return `<span class="hl-function">${name}</span>${paren}`;
-  });
-
-  // 关键字
-  if (rules.keywords) {
-    rules.keywords.lastIndex = 0;
-    safe = safe.replace(rules.keywords, '<span class="hl-keyword">$&</span>');
-  }
-
-  // 类型
-  if (rules.types) {
-    rules.types.lastIndex = 0;
-    safe = safe.replace(rules.types, '<span class="hl-type">$&</span>');
-  }
-
-  // 内置
-  if (rules.builtins) {
-    rules.builtins.lastIndex = 0;
-    safe = safe.replace(rules.builtins, '<span class="hl-builtin">$&</span>');
-  }
-
+  parts.push("(?<number>\\b(?:0[xX][0-9a-fA-F]+|0[bB][01]+|\\d+\\.?\\d*(?:[eE][+-]?\\d+)?)(?:[fFlLdDuU]*)\\b)");
+  // 标识符（关键字/类型/内置/函数/普通）
+  parts.push("(?<ident>[a-zA-Z_]\\w*)");
   // 操作符
-  safe = safe.replace(/([+\-*/%=!&|^~<>?:]+)/g, '<span class="hl-operator">$1</span>');
+  parts.push("(?<operator>[+\\-*/%=!|^~?:]+|&&|\\|\\||<<|>>|<|>)");
+  // 其他单字符
+  parts.push("(?<other>[\\s\\S])");
 
-  // 恢复字符串/注释占位符
-  safe = safe.replace(/\x00T(\d+)\x00/g, (_, idx) => tokens[+idx]);
+  const masterRe = new RegExp(parts.join("|"), "g");
 
-  return safe + "\n"; // 末尾换行保证 pre 高度匹配
+  // 预构建 keyword/type/builtin 的 Set 用于 O(1) 查找
+  const keywordSet = rules.keywords ? buildWordSet(rules.keywords) : new Set();
+  const typeSet = rules.types ? buildWordSet(rules.types) : new Set();
+  const builtinSet = rules.builtins ? buildWordSet(rules.builtins) : new Set();
+
+  let result = "";
+  let match;
+  while ((match = masterRe.exec(code)) !== null) {
+    const g = match.groups;
+    const text = match[0];
+    if (g.comment_ml !== undefined || g.comment_sl !== undefined) {
+      result += `<span class="hl-comment">${escapeHtml(text)}</span>`;
+    } else if (g.string !== undefined) {
+      result += `<span class="hl-string">${escapeHtml(text)}</span>`;
+    } else if (g.number !== undefined) {
+      result += `<span class="hl-number">${escapeHtml(text)}</span>`;
+    } else if (g.ident !== undefined) {
+      // 看下一个非空白字符是否是 (
+      const rest = code.slice(masterRe.lastIndex);
+      const isCall = /^\s*\(/.test(rest);
+
+      if (keywordSet.has(text)) {
+        result += `<span class="hl-keyword">${escapeHtml(text)}</span>`;
+      } else if (typeSet.has(text)) {
+        result += `<span class="hl-type">${escapeHtml(text)}</span>`;
+      } else if (builtinSet.has(text)) {
+        result += `<span class="hl-builtin">${escapeHtml(text)}</span>`;
+      } else if (isCall) {
+        result += `<span class="hl-function">${escapeHtml(text)}</span>`;
+      } else {
+        result += escapeHtml(text);
+      }
+    } else if (g.operator !== undefined) {
+      result += `<span class="hl-operator">${escapeHtml(text)}</span>`;
+    } else {
+      result += escapeHtml(text);
+    }
+  }
+
+  return result + "\n";
+}
+
+function buildWordSet(regex) {
+  // 从正则 /\b(word1|word2|...)\b/g 提取词列表
+  const src = regex.source;
+  const inner = src.match(/\\b\(([^)]+)\)\\b/);
+  if (!inner) return new Set();
+  return new Set(inner[1].split("|").map(w => w.replace(/\\\./g, ".")));
 }
 
 function highlightHtml(code) {
-  const tokens = [];
+  // HTML 用分段处理: <style>内容用CSS高亮, <script>内容用JS高亮
+  const re = /(<!--[\s\S]*?-->)|(<style[\s\S]*?>)([\s\S]*?)(<\/style>)|(<script[\s\S]*?>)([\s\S]*?)(<\/script>)|(<\/?[a-zA-Z][\w-]*)((?:\s+[^>]*?)?)(\s*\/?>)|([^<]+|<)/g;
+  let result = "";
+  let m;
+  while ((m = re.exec(code)) !== null) {
+    if (m[1] !== undefined) {
+      // HTML 注释
+      result += `<span class="hl-comment">${escapeHtml(m[1])}</span>`;
+    } else if (m[2] !== undefined) {
+      // <style>...</style>
+      result += highlightHtmlTag(m[2]);
+      result += highlightCss(m[3]);
+      result += highlightHtmlTag(m[4]);
+    } else if (m[5] !== undefined) {
+      // <script>...</script>
+      result += highlightHtmlTag(m[5]);
+      result += highlightCode(m[6], "javascript");
+      result += highlightHtmlTag(m[7]);
+    } else if (m[8] !== undefined) {
+      // 普通 HTML 标签
+      result += `<span class="hl-punct">${escapeHtml(m[8])}</span>`;
+      // 属性部分
+      if (m[9]) result += highlightHtmlAttrs(m[9]);
+      if (m[10]) result += `<span class="hl-punct">${escapeHtml(m[10])}</span>`;
+    } else if (m[11] !== undefined) {
+      // 纯文本
+      result += escapeHtml(m[11]);
+    }
+  }
+  return result + "\n";
+}
 
-  // 提取 <style>...</style> 内容
-  let safe = code.replace(/<style([\s\S]*?)>([\s\S]*?)<\/style>/gi, (m, attrs, css) => {
-    const i = tokens.length;
-    const inner = highlightCss(css);
-    tokens.push(`<span class="hl-tag">&lt;style${escapeHtml(attrs)}&gt;</span>${inner}<span class="hl-tag">&lt;/style&gt;</span>`);
-    return `\x00T${i}\x00`;
+function highlightHtmlTag(tag) {
+  // 简单高亮一个开/闭标签如 <style> 或 </script>
+  return tag.replace(/(<\/?)(\w[\w-]*)([\s\S]*?)(>)/g, (_, open, name, attrs, close) => {
+    let r = `<span class="hl-punct">${escapeHtml(open)}</span>`;
+    r += `<span class="hl-tag">${escapeHtml(name)}</span>`;
+    if (attrs) r += highlightHtmlAttrs(attrs);
+    r += `<span class="hl-punct">${escapeHtml(close)}</span>`;
+    return r;
   });
+}
 
-  // 提取 <script>...</script> 内容
-  safe = safe.replace(/<script([\s\S]*?)>([\s\S]*?)<\/script>/gi, (m, attrs, js) => {
-    const i = tokens.length;
-    const inner = highlightCode(js, "javascript");
-    tokens.push(`<span class="hl-tag">&lt;script${escapeHtml(attrs)}&gt;</span>${inner}<span class="hl-tag">&lt;/script&gt;</span>`);
-    return `\x00T${i}\x00`;
-  });
-
-  // HTML 注释
-  safe = safe.replace(/<!--[\s\S]*?-->/g, (m) => {
-    const i = tokens.length;
-    tokens.push(`<span class="hl-comment">${escapeHtml(m)}</span>`);
-    return `\x00T${i}\x00`;
-  });
-
-  // HTML 标签
-  safe = safe.replace(/<\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?\/?>/g, (tag) => {
-    const i = tokens.length;
-    // 高亮标签名和属性
-    let h = escapeHtml(tag);
-    // 标签名
-    h = h.replace(/^(&lt;\/?)([\w-]+)/, '$1<span class="hl-tag">$2</span>');
-    // 属性值
-    h = h.replace(/(=)(&quot;[^&]*?&quot;|&#x27;[^&]*?&#x27;)/g, '$1<span class="hl-value">$2</span>');
-    // 属性名
-    h = h.replace(/\s([\w-]+)(=)/g, ' <span class="hl-attr">$1</span>$2');
-    tokens.push(h);
-    return `\x00T${i}\x00`;
-  });
-
-  safe = escapeHtml(safe);
-  safe = safe.replace(/\x00T(\d+)\x00/g, (_, idx) => tokens[+idx]);
-  return safe + "\n";
+function highlightHtmlAttrs(attrs) {
+  let result = "";
+  const re = /(\s+)([\w-]+)(="[^"]*"|='[^']*')?|(\s+)/g;
+  let m;
+  let lastIndex = 0;
+  while ((m = re.exec(attrs)) !== null) {
+    if (m.index > lastIndex) result += escapeHtml(attrs.slice(lastIndex, m.index));
+    lastIndex = re.lastIndex;
+    if (m[4] !== undefined) {
+      result += escapeHtml(m[4]);
+    } else {
+      result += escapeHtml(m[1]);
+      result += `<span class="hl-attr">${escapeHtml(m[2])}</span>`;
+      if (m[3]) {
+        const eq = m[3][0];
+        const val = m[3].slice(1);
+        result += escapeHtml(eq);
+        result += `<span class="hl-value">${escapeHtml(val)}</span>`;
+      }
+    }
+  }
+  if (lastIndex < attrs.length) result += escapeHtml(attrs.slice(lastIndex));
+  return result;
 }
 
 function highlightCss(code) {
-  const tokens = [];
-
-  // CSS 注释
-  let safe = code.replace(/\/\*[\s\S]*?\*\//g, (m) => {
-    const i = tokens.length;
-    tokens.push(`<span class="hl-comment">${escapeHtml(m)}</span>`);
-    return `\x00T${i}\x00`;
-  });
-
-  // 字符串
-  safe = safe.replace(/(["'])(?:[^"'\\]|\\.)*?\1/g, (m) => {
-    const i = tokens.length;
-    tokens.push(`<span class="hl-string">${escapeHtml(m)}</span>`);
-    return `\x00T${i}\x00`;
-  });
-
-  safe = escapeHtml(safe);
-
-  // 选择器 (行首的非空白内容直到 {)
-  safe = safe.replace(/(^|\n)([\s]*)([\w.#\-\[\]=~^*:,>\s+]+?)(\s*\{)/g,
-    '$1$2<span class="hl-tag">$3</span>$4');
-
-  // 属性名: 值
-  safe = safe.replace(/([\w-]+)(\s*:)([^;{}]+)/g, (m, prop, colon, val) => {
-    return `<span class="hl-property">${prop}</span>${colon}<span class="hl-value">${val}</span>`;
-  });
-
-  // 数字+单位
-  safe = safe.replace(/\b(\d+\.?\d*)(px|em|rem|%|vh|vw|deg|s|ms)?\b/g,
-    '<span class="hl-number">$1$2</span>');
-
-  safe = safe.replace(/\x00T(\d+)\x00/g, (_, idx) => tokens[+idx]);
-  return safe + "\n";
+  // Token-based CSS highlighting
+  const re = /(\/\*[\s\S]*?\*\/)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|([\w-]+)(\s*:\s*)|(#[0-9a-fA-F]{3,8}\b)|(\d+\.?\d*(?:px|em|rem|%|vh|vw|deg|s|ms|fr)?)|([.#]?[\w-]+)|([{}:;,()>~+])|(\s+)|([\s\S])/g;
+  let result = "";
+  let m;
+  let inValue = false;
+  while ((m = re.exec(code)) !== null) {
+    if (m[1] !== undefined) {
+      result += `<span class="hl-comment">${escapeHtml(m[1])}</span>`;
+    } else if (m[2] !== undefined) {
+      result += `<span class="hl-string">${escapeHtml(m[2])}</span>`;
+    } else if (m[3] !== undefined) {
+      // property: value
+      result += `<span class="hl-property">${escapeHtml(m[3])}</span>`;
+      result += `<span class="hl-punct">${escapeHtml(m[4])}</span>`;
+      inValue = true;
+    } else if (m[5] !== undefined) {
+      result += `<span class="hl-number">${escapeHtml(m[5])}</span>`;
+    } else if (m[6] !== undefined) {
+      result += `<span class="hl-number">${escapeHtml(m[6])}</span>`;
+    } else if (m[7] !== undefined) {
+      if (inValue) {
+        result += `<span class="hl-value">${escapeHtml(m[7])}</span>`;
+      } else {
+        result += `<span class="hl-tag">${escapeHtml(m[7])}</span>`;
+      }
+    } else if (m[8] !== undefined) {
+      if (m[8] === ";" || m[8] === "}") inValue = false;
+      result += `<span class="hl-punct">${escapeHtml(m[8])}</span>`;
+    } else {
+      result += escapeHtml(m[0]);
+    }
+  }
+  return result + "\n";
 }
 
 let highlightTimer = null;
