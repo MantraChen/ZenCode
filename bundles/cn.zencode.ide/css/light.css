@@ -1,0 +1,5 @@
+/* Extend the complete platform light theme. */
+.MPartStack { swt-selected-tabs-background: #dfede4; swt-outer-keyline-color: #abbeb1; }
+CTabItem:selected { color: #14532d; }
+Form, ScrolledForm, FormText { background-color: #ffffff; color: #182b20; }
+Hyperlink { background-color: #ffffff; color: #005a9c; }

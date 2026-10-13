@@ -7,8 +7,11 @@
 ## 当前能力
 
 - Java + Eclipse Platform + JDT + WTP 工程与 Windows x64 产品构建。
-- terminal 风格工作台、项目/编辑/输出/助手布局和应用命令栏。
+- terminal 风格工作台，支持深色和浅色模式并保存选择。
+- 常驻“ZenCode 工具”顶栏菜单，可随时重新打开排错面板或查看帮助。
+- 自有界面中文化，内置 Eclipse 平台、Java/Web 工具和 EMF 的简体中文语言包。
 - Java 方法名拼写建议：结合接收者类型、公开方法及参数类型筛选候选。
+- `check` 汇总当前 Java 内容的编译诊断、项目构建路径错误及部分结构风险（字符串比较、数组边界、空 catch、finally 返回和 SQL 拼接等）；风险建议不自动修改，不能替代业务逻辑审查。
 - 全角语法标点检查：跳过字符串、字符字面量和注释。
 - 修改预览、确认应用及编辑器撤销；源码变化后拒绝过期修复。
 
@@ -36,16 +39,43 @@ Windows 中可将 `python3` 替换为 `python`。
 
 ## 运行与试用
 
-解压产品，在 `ZenCode.ini` 的 `-vmargs` 之前加入两行：第一行 `-vm`，第二行为本机 JDK 8 的 `bin/javaw.exe` 绝对路径。启动 `ZenCode.exe` 并选择可写工作区。
+Windows 启动入口为 **`ZenCode.exe`**。请使用完整产品包 `cn.zencode.product-win32.win32.x86_64.zip`；`target` 或 `plugins` 中的 JAR 是组件包，不能通过双击独立启动。
+
+1. 将整个 ZIP 解压到本地目录，保留 `plugins`、`features`、`configuration` 等目录；不要直接在压缩软件中启动，也不要只复制 EXE 或 JAR。
+2. 准备 **64 位 JDK 8**。Windows 是 64 位不代表已安装的 Java 也是 64 位。
+3. 在 `ZenCode.ini` 的 `-vmargs` **之前**加入以下两行，将示例路径替换为实际路径（INI 中路径不加引号）：
+
+   ```text
+   -vm
+   C:\Java\jdk8\bin\javaw.exe
+   ```
+
+4. 双击 `ZenCode.exe`，选择可写工作区。
+
+如果 EXE 也启动失败，在解压目录的命令提示符中运行下面的命令，并将 Java 路径替换为实际路径。这次使用 `java.exe` 以显示诊断输出：
+
+```bat
+ZenCode.exe -vm "C:\Java\jdk8\bin\java.exe" -consoleLog
+```
+
+排查时保留弹窗的完整错误内容、`configuration` 下最新的 `.log` 文件，以及所选工作区的 `.metadata/.log`（如果已经生成）。这些信息可以区分 Java 路径或位数问题、组件加载失败和工作区错误。
 
 创建或导入 Java 项目，将 `samples/CopyingMistakes.java.txt` 的内容放入对应 Java 类文件：
 
 1. 在 `pritnln` 处按 `Ctrl+1`，查看带 `[ZenCode]` 的快速修复候选。
-2. 点击助手中的 `[ CHECK ]`，检查全角语法标点。
+2. 点击助手中的 `[ 检查 ]`，查看编译诊断、风险提示和标点建议。
 3. 输入 `preview 1` 查看第一个建议，输入 `fix 1` 确认应用。
 4. 应用后重新检查，或在编辑器中撤销。
 
 命令栏只处理应用命令，不执行系统 shell。标点检查目前仅用于 `.java` 文件；方法拼写适配暂不覆盖隐式接收者、泛型方法和可变参数等复杂情况。
+
+## 外观与面板恢复
+
+顶栏 **ZenCode 工具** 提供“打开离线排错”“使用帮助与恢复面板”“深色模式”和“浅色模式”。关闭排错面板后，可从该菜单重新打开；菜单不依赖面板是否打开，也不受当前透视图影响。
+
+命令栏支持 `帮助` / `help`、`检查` / `check`、`预览 1` / `preview 1`、`修复 1` / `fix 1`、`清空` / `clear`。帮助包含重新打开面板的路径。
+
+产品默认使用简体中文。语言包随压缩包提供，无需运行时下载；上游未翻译的条目可能仍显示原文。更新时请完整解压到新目录，保留并选择原工作区，避免混合不同版本的插件。首次打开新版本会迁移旧的自定义主题设置。
 
 ## 验证状态
 
@@ -66,3 +96,5 @@ integration-tests/             JDT 集成测试
 samples/                       示例与反例
 scripts/                       产物验证工具
 ```
+
+测试普通类时请使用与公开类同名的文件，例如 `BadCode.java`，不要写入 `module-info.java`。若出现 JRE 系统库未绑定，请在项目的 Java 构建路径中选择有效的 JDK 8。

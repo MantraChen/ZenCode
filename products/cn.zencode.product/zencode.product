@@ -2,8 +2,10 @@
 <?pde version="3.5"?>
 <product name="ZenCode" uid="cn.zencode.product" id="cn.zencode.ide.product" application="org.eclipse.ui.ide.workbench" version="0.3.0.qualifier" useFeatures="true" includeLaunchers="true">
   <configIni use="default"/>
-  <launcherArgs><programArgs>-showlocation</programArgs><vmArgs>-Xms128m -Xmx768m -Dfile.encoding=UTF-8</vmArgs></launcherArgs>
-  <launcher name="ZenCode"/>
+  <launcherArgs><programArgs>-showlocation
+-nl
+zh_CN</programArgs><vmArgs>-Xms128m -Xmx768m -Dfile.encoding=UTF-8</vmArgs></launcherArgs>
+  <launcher name="ZenCode"><win useIco="true"><ico path="../../bundles/cn.zencode.ide/icons/FelixMantra.ico"/></win></launcher>
   <features>
     <feature id="org.eclipse.platform"/>
     <feature id="org.eclipse.jdt"/>
@@ -11,6 +13,9 @@
     <feature id="org.eclipse.jst.web_ui.feature"/>
     <feature id="org.eclipse.jst.server_adapters.feature"/>
     <feature id="org.eclipse.jst.server_adapters.ext.feature"/>
+    <feature id="org.eclipse.babel.nls_eclipse_zh"/>
+    <feature id="org.eclipse.babel.nls_webtools_zh"/>
+    <feature id="org.eclipse.babel.nls_modeling.emf_zh"/>
     <feature id="cn.zencode.feature"/>
   </features>
   <configurations>

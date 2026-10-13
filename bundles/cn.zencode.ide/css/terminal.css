@@ -1,9 +1,5 @@
-/* Native workbench theme; editor syntax colors live in plugin_customization.ini. */
-Shell, Composite, Canvas { background-color: #0d1117; color: #d2ded6; }
-Tree, Table, Text, StyledText, List { background-color: #111820; color: #d2ded6; }
-Label { background-color: #0d1117; color: #a9c1b0; }
-Sash { background-color: #284137; }
-CTabFolder { swt-simple: true; swt-tab-height: 30px; background-color: #0d1117; color: #a9c1b0; }
-CTabItem:selected { background-color: #203a2e; color: #7ee7a6; }
-.MPartStack { swt-selected-tabs-background: #203a2e; swt-unselected-tabs-color: #111820; swt-outer-keyline-color: #284137; swt-inner-keyline-color: #284137; }
-ToolBar { background-color: #111820; color: #d2ded6; }
+/* Extend the complete platform dark theme, including Forms and hyperlink styles. */
+.MPartStack { swt-selected-tabs-background: #203a2e; swt-outer-keyline-color: #375447; }
+CTabItem:selected { color: #a3efbc; }
+Form, ScrolledForm, FormText { background-color: #2f2f2f; color: #eeeeee; }
+Hyperlink { background-color: #2f2f2f; color: #6fc5ee; }

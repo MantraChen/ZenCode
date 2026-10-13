@@ -67,3 +67,7 @@ docs/*
 # Keep internal notes local; publish only the public README.
 *.md
 !/README.md
+
+# Product artwork is source material.
+!bundles/cn.zencode.ide/icons/
+!bundles/cn.zencode.ide/icons/*

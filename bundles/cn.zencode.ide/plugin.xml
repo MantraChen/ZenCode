@@ -3,9 +3,10 @@
 <plugin>
   <extension point="org.eclipse.core.runtime.products" id="product">
     <product application="org.eclipse.ui.ide.workbench" name="ZenCode">
+      <property name="windowImages" value="icons/icon16.png,icons/icon32.png,icons/icon48.png,icons/icon256.png"/>
       <property name="appName" value="ZenCode"/>
       <property name="preferenceCustomization" value="plugin_customization.ini"/>
-      <property name="cssTheme" value="cn.zencode.ide.terminal"/>
+      <property name="cssTheme" value="org.eclipse.e4.ui.css.theme.e4_dark"/>
     </product>
   </extension>
   <extension point="org.eclipse.ui.perspectives">
@@ -13,12 +14,31 @@
   </extension>
   <extension point="org.eclipse.ui.views">
     <category id="cn.zencode.ide.views" name="ZenCode"/>
-    <view id="cn.zencode.ide.assistant" name="[ ASSIST ] 离线排错" category="cn.zencode.ide.views" class="cn.zencode.ide.AssistantView" restorable="true"/>
+    <view id="cn.zencode.ide.assistant" name="离线排错" category="cn.zencode.ide.views" class="cn.zencode.ide.AssistantView" restorable="true"/>
   </extension>
   <extension point="org.eclipse.e4.ui.css.swt.theme">
-    <theme id="cn.zencode.ide.terminal" label="ZenCode Terminal" basestylesheeturi="css/terminal.css"/>
+    <stylesheet uri="css/terminal.css"><themeid refid="org.eclipse.e4.ui.css.theme.e4_dark"/></stylesheet>
+    <stylesheet uri="css/light.css"><themeid refid="org.eclipse.e4.ui.css.theme.e4_default"/></stylesheet>
   </extension>
   <extension point="org.eclipse.jdt.ui.quickFixProcessors">
     <quickFixProcessor id="cn.zencode.ide.typoFix" name="ZenCode 上下文拼写检查" class="cn.zencode.ide.TypoQuickFixProcessor"/>
+  </extension>
+  <extension point="org.eclipse.ui.startup"><startup class="cn.zencode.ide.ThemeStartup"/></extension>
+  <extension point="org.eclipse.ui.commands">
+    <command id="cn.zencode.ide.open" name="打开离线排错" defaultHandler="cn.zencode.ide.WorkbenchCommand"/>
+    <command id="cn.zencode.ide.help" name="使用帮助" defaultHandler="cn.zencode.ide.WorkbenchCommand"/>
+    <command id="cn.zencode.ide.dark" name="深色模式" defaultHandler="cn.zencode.ide.WorkbenchCommand"/>
+    <command id="cn.zencode.ide.light" name="浅色模式" defaultHandler="cn.zencode.ide.WorkbenchCommand"/>
+  </extension>
+  <extension point="org.eclipse.ui.menus">
+    <menuContribution locationURI="menu:org.eclipse.ui.main.menu?before=help">
+      <menu id="cn.zencode.ide.menu" label="ZenCode 工具">
+        <command commandId="cn.zencode.ide.open" label="打开离线排错" style="push"/>
+        <command commandId="cn.zencode.ide.help" label="使用帮助与恢复面板" style="push"/>
+        <separator name="appearance" visible="true"/>
+        <command commandId="cn.zencode.ide.dark" label="深色模式" style="push"/>
+        <command commandId="cn.zencode.ide.light" label="浅色模式" style="push"/>
+      </menu>
+    </menuContribution>
   </extension>
 </plugin>

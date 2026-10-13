@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?pde version="3.8"?>
+<target name="ZenCode 简体中文" sequenceNumber="1">
+  <locations>
+    <!-- Only these language packs enter the target; avoid all other Babel languages. -->
+    <location includeAllPlatforms="false" includeConfigurePhase="true" includeMode="slicer" includeSource="false" type="InstallableUnit">
+      <unit id="org.eclipse.babel.nls_eclipse_zh.feature.group" version="4.16.0.v20201226013120"/>
+      <unit id="org.eclipse.babel.nls_webtools_zh.feature.group" version="4.16.0.v20201226013120"/>
+      <unit id="org.eclipse.babel.nls_modeling.emf_zh.feature.group" version="4.16.0.v20201226013120"/>
+      <repository location="https://archive.eclipse.org/technology/babel/update-site/R0.18.2/2020-06/"/>
+    </location>
+  </locations>
+</target>

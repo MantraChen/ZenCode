@@ -8,6 +8,7 @@
     <plugin><groupId>org.eclipse.tycho</groupId><artifactId>tycho-maven-plugin</artifactId><version>${tycho.version}</version><extensions>true</extensions></plugin>
     <plugin><groupId>org.eclipse.tycho</groupId><artifactId>target-platform-configuration</artifactId><version>${tycho.version}</version><configuration>
       <environments><environment><os>win32</os><ws>win32</ws><arch>x86_64</arch></environment></environments>
+      <target><file>${maven.multiModuleProjectDirectory}/zencode.target</file></target>
       <executionEnvironment>JavaSE-1.8</executionEnvironment>
       <filters><filter><type>eclipse-plugin</type><id>org.eclipse.jdt.core</id><restrictTo><versionRange>[3.22.0.v20200530-2032,3.22.0.v20200530-2032]</versionRange></restrictTo></filter></filters>
     </configuration></plugin>

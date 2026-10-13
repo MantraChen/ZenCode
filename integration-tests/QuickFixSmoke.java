@@ -20,6 +20,11 @@ import org.eclipse.jface.text.Document;
 public final class QuickFixSmoke {
     private static int checks;
     public static void main(String[] args) throws Exception {
+        String review = cn.zencode.ide.JavaReview.check("class X { boolean f(String s) { return s == \"x\"; } int g() { try {return 1;} finally {return 0;} } void h() {try {} catch(Exception e) {}} }", "X.java", null).toString();
+        if (!review.contains("字符串内容比较") || !review.contains("finally") || !review.contains("空 catch")) throw new AssertionError(review);
+        String clean = cn.zencode.ide.JavaReview.check("class X { boolean f(String s) {return \"x\".equals(s);} }", "X.java", null).toString();
+        if (clean.contains("字符串内容比较") || clean.contains("空 catch")) throw new AssertionError(clean);
+        System.out.println("PASS structural review findings and clean-code counterexample.");
         check("public int get(int x) { return x; }", "new Bean().gte(1)", "get", "");
         check("private int get(int x) { return x; }", "new Bean().gte(1)", null, "");
         check("public int get(int x) { return x; }", "new Bean().gte(true)", null, "");
