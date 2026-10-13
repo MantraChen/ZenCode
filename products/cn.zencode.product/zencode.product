@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?pde version="3.5"?>
+<product name="ZenCode" uid="cn.zencode.product" id="cn.zencode.ide.product" application="org.eclipse.ui.ide.workbench" version="0.3.0.qualifier" useFeatures="true" includeLaunchers="true">
+  <configIni use="default"/>
+  <launcherArgs><programArgs>-showlocation</programArgs><vmArgs>-Xms128m -Xmx768m -Dfile.encoding=UTF-8</vmArgs></launcherArgs>
+  <launcher name="ZenCode"/>
+  <features>
+    <feature id="org.eclipse.platform"/>
+    <feature id="org.eclipse.jdt"/>
+    <feature id="org.eclipse.wst.web_ui.feature"/>
+    <feature id="org.eclipse.jst.web_ui.feature"/>
+    <feature id="org.eclipse.jst.server_adapters.feature"/>
+    <feature id="org.eclipse.jst.server_adapters.ext.feature"/>
+    <feature id="cn.zencode.feature"/>
+  </features>
+  <configurations>
+    <plugin id="org.eclipse.core.runtime" autoStart="true" startLevel="4"/>
+    <plugin id="org.eclipse.equinox.common" autoStart="true" startLevel="2"/>
+    <plugin id="org.apache.felix.scr" autoStart="true" startLevel="2"/>
+    <plugin id="org.eclipse.equinox.simpleconfigurator" autoStart="true" startLevel="1"/>
+  </configurations>
+  <preferencesInfo><targetfile overwrite="false"/></preferencesInfo>
+</product>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+  <extension point="org.eclipse.core.runtime.products" id="product">
+    <product application="org.eclipse.ui.ide.workbench" name="ZenCode">
+      <property name="appName" value="ZenCode"/>
+      <property name="preferenceCustomization" value="plugin_customization.ini"/>
+      <property name="cssTheme" value="cn.zencode.ide.terminal"/>
+    </product>
+  </extension>
+  <extension point="org.eclipse.ui.perspectives">
+    <perspective id="cn.zencode.ide.perspective" name="ZenCode · 终端工作台" class="cn.zencode.ide.TerminalPerspective"/>
+  </extension>
+  <extension point="org.eclipse.ui.views">
+    <category id="cn.zencode.ide.views" name="ZenCode"/>
+    <view id="cn.zencode.ide.assistant" name="[ ASSIST ] 离线排错" category="cn.zencode.ide.views" class="cn.zencode.ide.AssistantView" restorable="true"/>
+  </extension>
+  <extension point="org.eclipse.e4.ui.css.swt.theme">
+    <theme id="cn.zencode.ide.terminal" label="ZenCode Terminal" basestylesheeturi="css/terminal.css"/>
+  </extension>
+  <extension point="org.eclipse.jdt.ui.quickFixProcessors">
+    <quickFixProcessor id="cn.zencode.ide.typoFix" name="ZenCode 上下文拼写检查" class="cn.zencode.ide.TypoQuickFixProcessor"/>
+  </extension>
+</plugin>

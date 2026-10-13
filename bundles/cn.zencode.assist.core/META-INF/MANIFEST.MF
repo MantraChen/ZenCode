@@ -1,0 +1,8 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: ZenCode Offline Assistance Core
+Bundle-SymbolicName: cn.zencode.assist.core
+Bundle-Version: 0.3.0.qualifier
+Bundle-RequiredExecutionEnvironment: JavaSE-1.8
+Export-Package: cn.zencode.assist.core
+
