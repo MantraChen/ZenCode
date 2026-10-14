@@ -29,7 +29,7 @@ import org.eclipse.ui.texteditor.ITextEditor;
 public final class AssistantView extends ViewPart {
     private StyledText output;
     private Text command;
-    private Composite container;
+    private Composite container, outputFrame, commandFrame;
     private Label title;
     private Button check;
     private Color background, foreground, accent, warning, error;
@@ -53,10 +53,12 @@ public final class AssistantView extends ViewPart {
         check.setText("[ 检查 ] 当前 Java 文件");
         check.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         check.addSelectionListener(new SelectionAdapter() { @Override public void widgetSelected(SelectionEvent e) { checkEditor(); } });
-        output = new StyledText(parent, SWT.READ_ONLY | SWT.WRAP | SWT.V_SCROLL | SWT.BORDER);
+        outputFrame = frame(parent, true);
+        output = new StyledText(outputFrame, SWT.READ_ONLY | SWT.WRAP | SWT.V_SCROLL);
         output.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         output.setBackground(background); output.setForeground(foreground); output.setFont(mono);
-        command = new Text(parent, SWT.SINGLE | SWT.BORDER);
+        commandFrame = frame(parent, false);
+        command = new Text(commandFrame, SWT.SINGLE);
         command.setMessage("> 帮助 / 检查 / 预览 1 / 修复 1 / 清空");
         command.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         command.setFont(mono);
@@ -66,8 +68,16 @@ public final class AssistantView extends ViewPart {
         showHelp();
         applyTheme(ThemeController.isDark());
     }
+    private Composite frame(Composite parent, boolean grow) {
+        Composite frame = new Composite(parent, SWT.NONE);
+        GridLayout layout = new GridLayout(1, false);
+        layout.marginWidth = 1; layout.marginHeight = 1;
+        frame.setLayout(layout);
+        frame.setLayoutData(new GridData(SWT.FILL, grow ? SWT.FILL : SWT.CENTER, true, grow));
+        return frame;
+    }
     public void showHelp() {
-        output.setText("[ 就绪 ] 离线排错已加载\n\n关闭后重新打开：\n顶栏【ZenCode 工具 → 打开离线排错】。\n也可通过【窗口 → 显示视图 → 其他 → ZenCode → 离线排错】打开。\n关闭面板不会停用 Java 快速修复。\n\n切换外观：\n顶栏【ZenCode 工具 → 深色模式 / 浅色模式】。\n设置会保存，下次启动自动恢复。\n\n> 帮助 / help\n显示本说明。\n\n> 检查 / check\n检查当前 Java 文件的编译诊断、部分结构风险及全角标点。\n\n> 预览 1 / preview 1\n查看第 1 条建议。\n\n> 修复 1 / fix 1\n确认后应用，可在编辑器中撤销。\n\n> 清空 / clear\n清空输出。\n\n方法名拼写错误：在 Java 编辑器中使用 Ctrl+1，查看带 [ZenCode] 的建议。\n完整编译诊断请查看底部【问题】面板。\n");
+        output.setText("[ 就绪 ] 离线排错已加载\n\n关闭后重新打开：\n顶栏【ZenCode 工具 → 打开离线排错】。\n也可通过【窗口 → 显示视图 → 其他 → ZenCode → 离线排错】打开。\n关闭面板不会停用 Java 快速修复。\n\n切换外观：\n顶栏【ZenCode 工具 → 深色模式 / 浅色模式】。\n设置会保存，下次启动自动恢复。Windows 原生菜单栏需要重启才能完整更新。\n\n> 帮助 / help\n显示本说明。\n\n> 检查 / check\n检查当前 Java 文件的编译诊断、部分结构风险及全角标点。\n\n> 预览 1 / preview 1\n查看第 1 条建议。\n\n> 修复 1 / fix 1\n确认后应用，可在编辑器中撤销。\n\n> 清空 / clear\n清空输出。\n\n断点：把光标放在可执行语句上，按 Ctrl+Shift+B，或使用顶栏【ZenCode 工具 → 切换当前行断点】。左侧圆点表示已设置断点。\n\n中文出现问号：先在【文件属性 → 资源 → 文本文件编码】检查 UTF-8。若文字已保存成问号，改字体或编码不能恢复，请从原始文本重新复制。不要对现有 GBK 文件直接强制转换。\n\n方法名拼写错误：在 Java 编辑器中使用 Ctrl+1，查看带 [ZenCode] 的建议。\n完整编译诊断请查看底部【问题】面板。\n");
     }
     public void applyTheme(boolean dark) {
         if (output == null || output.isDisposed()) return;
@@ -81,6 +91,8 @@ public final class AssistantView extends ViewPart {
         for (org.eclipse.swt.widgets.Control control : new org.eclipse.swt.widgets.Control[] {container, title, check, output, command}) {
             control.setBackground(background); control.setForeground(foreground);
         }
+        outputFrame.setBackground(accent);
+        commandFrame.setBackground(accent);
         title.setForeground(accent);
         output.setStyleRanges(new StyleRange[0]);
         java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\\[ (就绪|警告|错误|提示|预览|检查)[^\\]]*\\]").matcher(output.getText());

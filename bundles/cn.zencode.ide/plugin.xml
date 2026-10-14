@@ -35,10 +35,18 @@
       <menu id="cn.zencode.ide.menu" label="ZenCode 工具">
         <command commandId="cn.zencode.ide.open" label="打开离线排错" style="push"/>
         <command commandId="cn.zencode.ide.help" label="使用帮助与恢复面板" style="push"/>
+        <command commandId="org.eclipse.debug.ui.commands.ToggleBreakpoint" label="切换当前行断点" style="push"/>
         <separator name="appearance" visible="true"/>
         <command commandId="cn.zencode.ide.dark" label="深色模式" style="push"/>
         <command commandId="cn.zencode.ide.light" label="浅色模式" style="push"/>
       </menu>
+    </menuContribution>
+    <menuContribution locationURI="toolbar:org.eclipse.ui.main.toolbar?after=additions">
+      <toolbar id="cn.zencode.ide.debugToolbar">
+        <command commandId="org.eclipse.debug.ui.commands.ToggleBreakpoint" label="切换断点" mode="FORCE_TEXT" tooltip="光标放在可执行语句上，切换断点（Ctrl+Shift+B）" style="push">
+          <visibleWhen checkEnabled="false"><with variable="activeEditorId"><equals value="org.eclipse.jdt.ui.CompilationUnitEditor"/></with></visibleWhen>
+        </command>
+      </toolbar>
     </menuContribution>
   </extension>
 </plugin>
