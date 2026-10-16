@@ -1,9 +1,0 @@
-// Copy into an Eclipse Java project as CopyingMistakes.java. This example is deliberately broken.
-public class CopyingMistakes {
-    public static void main(String[] args) {
-        String name = "中文标点；应保留";
-        System.out.pritnln(name); // Ctrl+1: println candidate with compatible String argument.
-        int count = 1； // CHECK: fullwidth semicolon, preview then apply.
-        System.out.println(count);
-    }
-}
