@@ -32,12 +32,25 @@ for archive in archives:
         with zipfile.ZipFile(io.BytesIO(product.read(ide_name))) as ide:
             descriptor = ET.fromstring(ide.read('plugin.xml'))
             commands = {c.get('id') for c in descriptor.findall("./extension[@point='org.eclipse.ui.commands']/command")}
-            for action in ('open', 'help', 'dark', 'light'):
+            for action in ('open', 'help', 'dark', 'light', 'webProject', 'tomcatCheck', 'webCheck', 'database', 'webTemplate', 'newWebSample', 'configureServer', 'runServer', 'debugServer'):
                 assert 'cn.zencode.ide.' + action in commands, 'Missing menu action: ' + action
             assert descriptor.find("./extension[@point='org.eclipse.ui.menus']/menuContribution/menu[@id='cn.zencode.ide.menu']") is not None
             for asset in ('css/terminal.css', 'css/light.css', 'cn/zencode/ide/ThemeController.class',
                           'cn/zencode/ide/ThemeStartup.class', 'cn/zencode/ide/WorkbenchCommand.class'):
                 assert asset in ide.namelist(), 'Missing theme/menu asset: ' + asset
+        wizard_found = False
+        for member in names:
+            if '/plugins/' not in '/' + member or not member.endswith('.jar'):
+                continue
+            with zipfile.ZipFile(io.BytesIO(product.read(member))) as bundle:
+                if 'plugin.xml' in bundle.namelist():
+                    try:
+                        xml = ET.fromstring(bundle.read('plugin.xml'))
+                        wizard_found |= any(w.get('id') == 'org.eclipse.jst.servlet.ui.project.facet.WebProjectWizard'
+                            for w in xml.findall("./extension[@point='org.eclipse.ui.newWizards']/wizard"))
+                    except ET.ParseError:
+                        pass
+        assert wizard_found, 'Missing actual WTP Dynamic Web Project wizard registration'
         compiled = 0
         dependency_classes = 0
         for name in names:

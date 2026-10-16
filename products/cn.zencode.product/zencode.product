@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <?pde version="3.5"?>
-<product name="ZenCode" uid="cn.zencode.product" id="cn.zencode.ide.product" application="org.eclipse.ui.ide.workbench" version="0.3.0.qualifier" useFeatures="true" includeLaunchers="true">
+<product name="ZenCode" uid="cn.zencode.product" id="cn.zencode.ide.product" application="org.eclipse.ui.ide.workbench" version="0.6.0.qualifier" useFeatures="true" includeLaunchers="true">
   <configIni use="default"/>
   <launcherArgs><programArgs>-showlocation
 -nl
@@ -11,6 +11,7 @@ zh_CN</programArgs><vmArgs>-Xms128m -Xmx768m -Dfile.encoding=UTF-8</vmArgs></lau
     <feature id="org.eclipse.jdt"/>
     <feature id="org.eclipse.wst.web_ui.feature"/>
     <feature id="org.eclipse.jst.web_ui.feature"/>
+    <feature id="org.eclipse.jst.enterprise_ui.feature"/>
     <feature id="org.eclipse.jst.server_adapters.feature"/>
     <feature id="org.eclipse.jst.server_adapters.ext.feature"/>
     <feature id="org.eclipse.babel.nls_eclipse_zh"/>

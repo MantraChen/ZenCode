@@ -4,11 +4,30 @@
 
 目标环境为 Windows 7 SP1 / Windows 10 x64、4GB 内存和 JDK 8。**当前为开发原型，尚未完成目标系统实机兼容性与性能验收。**
 
+## 0.6.0 模块与验收
+
+- Web 示例工程：通过 WTP 向导选择 runtime/JDK 8，再按实际源码和部署目录加入 JSP、Servlet、JDBC 示例；拒绝覆盖已有源码。也支持导出纯目录模板。
+- 服务器：提供配置、运行和调试入口，复用 WTP 生命周期；本地安装检查识别 Tomcat 7.0、8.0、8.5、9.0。
+- Web 检查：后台读取当前编辑快照，检查静态重复 id、相对资源路径、明确链接的本地 CSS 名称候选，汇总已保存文件的 Eclipse/WTP 诊断。支持选择结果定位，文件变化后拒绝过期定位。
+- 表单/JSP：用户显式确认候选配对后，比较静态表单名称与 JSP scriptlet AST 中的字符串取参名称；仅为建议，不证明接收者类型或运行关联，不自动修改。
+- 数据库：多 JAR 本地驱动、常见配置模板、Java 8 校验、后台连接、只读表列元数据、离线候选筛选复制、参数化查询示例。15秒停止等待，可取消；不执行用户 SQL、不保存凭据。
+
+检查不是完整的浏览器或 JSP 执行环境。动态路径、动态样式、完整 JSP 类型绑定纠错和现代 JavaScript 支持仍有边界；MF 对应产品未确认。Windows、实际数据库、JSP断点及四版本服务器仍需统一实测，不能将构建通过视为验收通过。
+
+离线 Tomcat 冒烟脚本（需要已有 JDK 8、对应 Tomcat 安装目录）：
+
+```sh
+python3 scripts/smoke-tomcat.py --java-home /path/to/jdk8 /path/to/tomcat7 /path/to/tomcat8 /path/to/tomcat85 /path/to/tomcat9
+```
+
+脚本使用独立临时服务器目录，只管理自己启动的进程，验证 Servlet 响应与 JSP 编译，不替代 IDE 调试实测。
+
 ## 当前能力
 
 - Java + Eclipse Platform + JDT + WTP 工程与 Windows x64 产品构建。
 - terminal 风格工作台，支持深色和浅色模式并保存选择。
-- 常驻“ZenCode 工具”顶栏菜单，可随时重新打开排错面板或查看帮助。
+- 常驻“ZenCode 工具”顶栏菜单，可随时重新打开排错面板、查看帮助或恢复 Java 默认字体。
+- 未设置 Java 字体的工作区首次初始化时使用系统默认字体；保留已有字体选择。
 - 自有界面中文化，内置 Eclipse 平台、Java/Web 工具和 EMF 的简体中文语言包。
 - Java 方法名拼写建议：结合接收者类型、公开方法及参数类型筛选候选。
 - `check` 汇总当前 Java 内容的编译诊断、项目构建路径错误及部分结构风险（字符串比较、数组边界、空 catch、finally 返回和 SQL 拼接等）；风险建议不自动修改，不能替代业务逻辑审查。
@@ -79,7 +98,7 @@ ZenCode.exe -vm "C:\Java\jdk8\bin\java.exe" -consoleLog
 
 ## 验证状态
 
-已通过 14 项核心回归测试、8 项真实 JDT 解析与快速修复场景测试，以及 Windows x64 交叉构建和压缩包检查。
+已通过 33 项核心回归测试、8 项真实 JDT 解析与快速修复场景测试，以及 Windows x64 交叉构建和压缩包检查。
 
 这些结果不等同于 Windows 实机验证。界面视觉、中文输入、JDK 8 实际运行、Java/JSP 调试、多版本服务器、断网部署及 4GB 性能仍待验收。
 
@@ -98,3 +117,15 @@ scripts/                       产物验证工具
 ```
 
 测试普通类时请使用与公开类同名的文件，例如 `BadCode.java`，不要写入 `module-info.java`。若出现 JRE 系统库未绑定，请在项目的 Java 构建路径中选择有效的 JDK 8。
+
+## Windows 测试安装包
+
+安装包包含配套 JDK 8，支持离线安装，默认安装到当前用户目录，并创建桌面和开始菜单快捷方式。快捷方式使用“文档”目录下的 `ZenCodeWorkspace`；卸载保留工作区。安装目标目录必须为空，不覆盖已有版本。
+
+先完成 Windows 产品构建，再准备 Temurin `OpenJDK8U-jdk_x64_windows_hotspot_8u362b09.zip`，安装 NSIS 后运行：
+
+```sh
+python3 scripts/build-installer.py --jdk-zip /path/to/OpenJDK8U-jdk_x64_windows_hotspot_8u362b09.zip
+```
+
+脚本验证固定 JDK 校验值，产物及 SHA-256 文件位于 `dist/windows-installer/`。此 JDK 为当前兼容性测试基线。安装包为未签名测试版本，安装、启动和卸载仍需在目标 Windows 环境验收。

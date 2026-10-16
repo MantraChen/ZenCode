@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<feature id="cn.zencode.feature" label="ZenCode 终端开发工具" version="0.3.0.qualifier" provider-name="ZenCode">
+<feature id="cn.zencode.feature" label="ZenCode 终端开发工具" version="0.6.0.qualifier" provider-name="ZenCode">
   <description>离线 Java Web 开发工具 · 终端工作台与中文排错</description>
   <plugin id="cn.zencode.assist.core" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
   <plugin id="cn.zencode.ide" download-size="0" install-size="0" version="0.0.0" unpack="false"/>

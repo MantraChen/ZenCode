@@ -20,8 +20,9 @@ public final class ThemeStartup implements IStartup {
                     resources.flush();
                 }
                 ThemeController.apply(ThemeController.isDark());
+                EditorFontDefaults.initialize();
             } catch (org.osgi.service.prefs.BackingStoreException e) {
-                StatusManager.getManager().handle(new Status(IStatus.ERROR, "cn.zencode.ide", "无法保存新工作区编码", e), StatusManager.LOG);
+                StatusManager.getManager().handle(new Status(IStatus.ERROR, "cn.zencode.ide", "无法保存工作区初始化设置", e), StatusManager.LOG);
             }
             catch (RuntimeException e) {
                 StatusManager.getManager().handle(new Status(IStatus.ERROR, "cn.zencode.ide", "无法恢复界面主题", e), StatusManager.LOG);

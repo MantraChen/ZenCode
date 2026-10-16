@@ -22,11 +22,14 @@ public final class WorkbenchCommand extends AbstractHandler {
                     org.eclipse.ui.PlatformUI.getWorkbench().restart();
                 }
             }
+            else if (command.endsWith(".fontDefaults")) {
+                EditorFontDefaults.restore();
+            }
             else {
                 AssistantView view = (AssistantView) window.getActivePage().showView("cn.zencode.ide.assistant");
                 if (command.endsWith(".help")) view.showHelp();
             }
-        } catch (PartInitException | RuntimeException e) { throw new ExecutionException("无法完成操作：" + e.getMessage(), e); }
+        } catch (org.osgi.service.prefs.BackingStoreException | PartInitException | RuntimeException e) { throw new ExecutionException("无法完成操作：" + e.getMessage(), e); }
         return null;
     }
 }

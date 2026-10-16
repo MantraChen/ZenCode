@@ -2,7 +2,10 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: ZenCode 离线排错核心
 Bundle-SymbolicName: cn.zencode.assist.core
-Bundle-Version: 0.3.0.qualifier
+Bundle-Version: 0.6.0.qualifier
 Bundle-RequiredExecutionEnvironment: JavaSE-1.8
-Export-Package: cn.zencode.assist.core
+Export-Package: cn.zencode.assist.core,
+ cn.zencode.assist.core.webchecks,
+ cn.zencode.assist.core.database,
+ cn.zencode.assist.core.runtime
 

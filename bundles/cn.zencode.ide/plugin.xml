@@ -25,6 +25,16 @@
   </extension>
   <extension point="org.eclipse.ui.startup"><startup class="cn.zencode.ide.ThemeStartup"/></extension>
   <extension point="org.eclipse.ui.commands">
+    <command id="cn.zencode.ide.newWebSample" name="新建 JSP/Servlet 示例工程" defaultHandler="cn.zencode.ide.web.NewWebSampleCommand"/>
+    <command id="cn.zencode.ide.configureServer" name="配置本地服务器" defaultHandler="cn.zencode.ide.web.ServerCommand"/>
+    <command id="cn.zencode.ide.runServer" name="在服务器运行" defaultHandler="cn.zencode.ide.web.ServerCommand"/>
+    <command id="cn.zencode.ide.debugServer" name="在服务器调试" defaultHandler="cn.zencode.ide.web.ServerCommand"/>
+    <command id="cn.zencode.ide.webTemplate" name="导出离线 Web 模板" defaultHandler="cn.zencode.ide.web.ExportWebTemplateCommand"/>
+    <command id="cn.zencode.ide.webCheck" name="检查 Web 文件" defaultHandler="cn.zencode.ide.webchecks.WebCheckCommand"/>
+    <command id="cn.zencode.ide.database" name="数据库连接测试" defaultHandler="cn.zencode.ide.database.DatabaseConnectionHandler"/>
+    <command id="cn.zencode.ide.webProject" name="新建 Web 项目" defaultHandler="cn.zencode.ide.web.WebProjectCommand"/>
+    <command id="cn.zencode.ide.tomcatCheck" name="检查 Tomcat 配置" defaultHandler="cn.zencode.ide.web.TomcatCheckCommand"/>
+    <command id="cn.zencode.ide.fontDefaults" name="恢复 Java 默认字体" defaultHandler="cn.zencode.ide.WorkbenchCommand"/>
     <command id="cn.zencode.ide.open" name="打开离线排错" defaultHandler="cn.zencode.ide.WorkbenchCommand"/>
     <command id="cn.zencode.ide.help" name="使用帮助" defaultHandler="cn.zencode.ide.WorkbenchCommand"/>
     <command id="cn.zencode.ide.dark" name="深色模式" defaultHandler="cn.zencode.ide.WorkbenchCommand"/>
@@ -33,9 +43,19 @@
   <extension point="org.eclipse.ui.menus">
     <menuContribution locationURI="menu:org.eclipse.ui.main.menu?before=help">
       <menu id="cn.zencode.ide.menu" label="ZenCode 工具">
+        <command commandId="cn.zencode.ide.newWebSample" label="新建 JSP/Servlet 示例工程" style="push"/>
+        <command commandId="cn.zencode.ide.configureServer" label="配置本地服务器" style="push"/>
+        <command commandId="cn.zencode.ide.runServer" label="在服务器运行" style="push"/>
+        <command commandId="cn.zencode.ide.debugServer" label="在服务器调试" style="push"/>
+        <command commandId="cn.zencode.ide.webTemplate" label="导出离线 Web 模板" style="push"/>
+        <command commandId="cn.zencode.ide.webCheck" label="检查当前 Web 文件" style="push"/>
+        <command commandId="cn.zencode.ide.database" label="数据库连接测试" style="push"/>
+        <command commandId="cn.zencode.ide.webProject" label="新建 Web 项目" style="push"/>
+        <command commandId="cn.zencode.ide.tomcatCheck" label="检查 Tomcat 配置" style="push"/>
         <command commandId="cn.zencode.ide.open" label="打开离线排错" style="push"/>
         <command commandId="cn.zencode.ide.help" label="使用帮助与恢复面板" style="push"/>
         <command commandId="org.eclipse.debug.ui.commands.ToggleBreakpoint" label="切换当前行断点" style="push"/>
+        <command commandId="cn.zencode.ide.fontDefaults" label="恢复 Java 默认字体（中文显示）" style="push"/>
         <separator name="appearance" visible="true"/>
         <command commandId="cn.zencode.ide.dark" label="深色模式" style="push"/>
         <command commandId="cn.zencode.ide.light" label="浅色模式" style="push"/>
