@@ -1,0 +1,7 @@
+public class PunctuationCase {
+    public static void main(String[] args) {
+        // 中文注释：；，（）必须保留
+        String s = "中文字符串：；，（）必须保留";
+        System.out.println(s)；
+    }
+}

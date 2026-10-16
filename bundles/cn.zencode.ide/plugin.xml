@@ -24,7 +24,9 @@
     <quickFixProcessor id="cn.zencode.ide.typoFix" name="ZenCode 上下文拼写检查" class="cn.zencode.ide.TypoQuickFixProcessor"/>
   </extension>
   <extension point="org.eclipse.ui.startup"><startup class="cn.zencode.ide.ThemeStartup"/></extension>
+  <extension point="org.eclipse.ui.bindings"><key commandId="cn.zencode.ide.sqlCompletion" sequence="M1+M3+SPACE" schemeId="org.eclipse.ui.defaultAcceleratorConfiguration" contextId="org.eclipse.ui.textEditorScope"/></extension>
   <extension point="org.eclipse.ui.commands">
+    <command id="cn.zencode.ide.sqlCompletion" name="SQL 表列补全" defaultHandler="cn.zencode.ide.database.SqlCompletionHandler"/>
     <command id="cn.zencode.ide.newWebSample" name="新建 JSP/Servlet 示例工程" defaultHandler="cn.zencode.ide.web.NewWebSampleCommand"/>
     <command id="cn.zencode.ide.configureServer" name="配置本地服务器" defaultHandler="cn.zencode.ide.web.ServerCommand"/>
     <command id="cn.zencode.ide.runServer" name="在服务器运行" defaultHandler="cn.zencode.ide.web.ServerCommand"/>
@@ -49,6 +51,7 @@
         <command commandId="cn.zencode.ide.debugServer" label="在服务器调试" style="push"/>
         <command commandId="cn.zencode.ide.webTemplate" label="导出离线 Web 模板" style="push"/>
         <command commandId="cn.zencode.ide.webCheck" label="检查当前 Web 文件" style="push"/>
+        <command commandId="cn.zencode.ide.sqlCompletion" label="SQL 表列补全（Ctrl+Alt+Space）" style="push"/>
         <command commandId="cn.zencode.ide.database" label="数据库连接测试" style="push"/>
         <command commandId="cn.zencode.ide.webProject" label="新建 Web 项目" style="push"/>
         <command commandId="cn.zencode.ide.tomcatCheck" label="检查 Tomcat 配置" style="push"/>

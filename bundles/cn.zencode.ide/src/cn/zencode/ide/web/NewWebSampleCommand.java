@@ -21,14 +21,14 @@ public final class NewWebSampleCommand extends AbstractHandler {
         org.eclipse.swt.widgets.Shell shell = HandlerUtil.getActiveShellChecked(event);
         Set<String> previous = new HashSet<String>();
         for (IProject project : ResourcesPlugin.getWorkspace().getRoot().getProjects()) previous.add(project.getName());
-        MessageDialog.openInformation(shell, "新建 JSP / Servlet 工程", "接下来打开 WTP 工程向导。请选择本地 Tomcat runtime 和 JDK 8；Dynamic Web Module 选择 3.0 或以上（Tomcat 7 为 3.0，8/8.5 为 3.1，9 为 4.0）。\n完成后向新工程自动添加 JSP、Servlet 和 JDBC 示例。已有文件不会覆盖。若没有 runtime，请先使用配置本地服务器入口。");
+        MessageDialog.openInformation(shell, "新建 JSP / Servlet 工程", "接下来打开 WTP 工程向导。请选择本地 Tomcat 运行环境 和 JDK 8；动态 Web 模块版本选择 3.0 或以上（Tomcat 7 为 3.0，8/8.5 为 3.1，9 为 4.0）。\n完成后向新工程自动添加 JSP、Servlet 和 JDBC 示例。已有文件不会覆盖。若没有运行环境，请先使用配置本地服务器入口。");
         new WebProjectCommand().execute(event);
         IProject target = null;
         for (IProject project : ResourcesPlugin.getWorkspace().getRoot().getProjects()) {
             if (previous.contains(project.getName()) || !project.isOpen()) continue;
             IVirtualComponent component = ComponentCore.createComponent(project);
             if (component != null && component.exists()) {
-                if (target != null) { MessageDialog.openError(shell, "ERROR / 工程不唯一", "检测到多个新工程，未写入模板。"); return null; }
+                if (target != null) { MessageDialog.openError(shell, "错误 / 工程不唯一", "检测到多个新工程，未写入模板。"); return null; }
                 target = project;
             }
         }
@@ -77,9 +77,9 @@ public final class NewWebSampleCommand extends AbstractHandler {
                     file.setCharset("UTF-8", monitor);
                 }
             }, project, IWorkspace.AVOID_UPDATE, null);
-            MessageDialog.openInformation(shell, "READY / 模板已创建", "已按工程实际部署与源目录加入模板：" + project.getName() + "\n选择工程后使用运行服务器 / 调试服务器入口。JDBC 驱动需自行提供；示例不自动连接数据库。");
+            MessageDialog.openInformation(shell, "就绪 / 模板已创建", "已按工程实际部署与源目录加入模板：" + project.getName() + "\n选择工程后使用运行服务器 / 调试服务器入口。JDBC 驱动需自行提供；示例不自动连接数据库。");
         } catch (CoreException e) {
-            MessageDialog.openError(shell, "ERROR / 模板写入", e.getMessage() + "\n新建工程保留；请检查可能已写入的示例文件。");
+            MessageDialog.openError(shell, "错误 / 模板写入", e.getMessage() + "\n新建工程保留；请检查可能已写入的示例文件。");
         }
         return null;
     }

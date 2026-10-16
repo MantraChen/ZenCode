@@ -11,7 +11,7 @@ SetCompressorDictSize 32
 BrandingText "ZenCode · 离线代码编辑器"
 !define MUI_ICON "${ICON}"
 !define MUI_UNICON "${ICON}"
-VIProductVersion "0.6.0.0"
+VIProductVersion "0.9.0.0"
 VIAddVersionKey /LANG=2052 "ProductName" "ZenCode"
 VIAddVersionKey /LANG=2052 "FileDescription" "ZenCode 测试版安装程序"
 VIAddVersionKey /LANG=2052 "FileVersion" "${RELEASE}"

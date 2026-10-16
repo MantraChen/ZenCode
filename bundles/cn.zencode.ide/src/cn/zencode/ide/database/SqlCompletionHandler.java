@@ -34,7 +34,7 @@ public final class SqlCompletionHandler extends AbstractHandler {
         dialog.setContentProvider(ArrayContentProvider.getInstance()); dialog.setLabelProvider(new LabelProvider()); dialog.setInput(candidates);
         if(dialog.open()!=org.eclipse.jface.window.Window.OK || dialog.getResult()==null || dialog.getResult().length==0) return null;
         if(!before.equals(document.get())) { MessageDialog.openWarning(shell,"源文本已改变","补全已取消，请在当前文本上重试。"); return null; }
-        if(!editor.validateEditorInputState()) return null;
+        if(editor instanceof org.eclipse.ui.texteditor.ITextEditorExtension2 && !((org.eclipse.ui.texteditor.ITextEditorExtension2)editor).validateEditorInputState()) return null;
         if(!before.equals(document.get())) { MessageDialog.openWarning(shell,"源文本已改变","补全已取消，请在当前文本上重试。"); return null; }
         String replacement=(String)dialog.getResult()[0];
         try { document.replace(context.start,text.getOffset()-context.start,replacement); editor.selectAndReveal(context.start+replacement.length(),0); }

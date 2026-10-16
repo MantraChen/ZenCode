@@ -24,9 +24,9 @@ public final class ExportWebTemplateCommand extends AbstractHandler {
         Path destination = Paths.get(parent).resolve(name.getValue());
         try {
             cn.zencode.assist.core.runtime.OfflineWebTemplate.create(destination);
-            MessageDialog.openInformation(shell, "READY / 离线示例", "已导出：" + destination + "\n包含 JSP、Servlet、参数化 JDBC 示例及操作说明。\n请先通过新建 Web 工程向导配置工程，再按 README.txt 导入源码并 Run on Server。驱动需要自行准备。");
+            MessageDialog.openInformation(shell, "就绪 / 离线示例", "已导出：" + destination + "\n包含 JSP、Servlet、参数化 JDBC 示例及操作说明。\n请先通过新建 Web 工程向导配置工程，再按 README.txt 导入源码并选择“在服务器上运行”。驱动需要自行准备。");
         } catch (java.io.IOException e) {
-            MessageDialog.openError(shell, "ERROR / 导出失败", "未覆盖已有文件。导出可能留下部分新文件，请检查目标目录。\n" + e.getMessage());
+            MessageDialog.openError(shell, "错误 / 导出失败", "未覆盖已有文件。导出可能留下部分新文件，请检查目标目录。\n" + e.getMessage());
         }
         return null;
     }

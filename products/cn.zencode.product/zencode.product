@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <?pde version="3.5"?>
-<product name="ZenCode" uid="cn.zencode.product" id="cn.zencode.ide.product" application="org.eclipse.ui.ide.workbench" version="0.6.0.qualifier" useFeatures="true" includeLaunchers="true">
+<product name="ZenCode" uid="cn.zencode.product" id="cn.zencode.ide.product" application="org.eclipse.ui.ide.workbench" version="0.9.0.qualifier" useFeatures="true" includeLaunchers="true">
   <configIni use="default"/>
   <launcherArgs><programArgs>-showlocation
 -nl

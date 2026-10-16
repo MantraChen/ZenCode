@@ -14,7 +14,7 @@ parser.add_argument('--jdk-zip', type=Path, required=True)
 args = parser.parse_args()
 assert hashlib.sha256(args.jdk_zip.read_bytes()).hexdigest() == JDK_SHA256, 'Unexpected JDK archive'
 product = ROOT / 'products/cn.zencode.product/target/products/cn.zencode.product-win32.win32.x86_64.zip'
-release = '0.6.0-test-20261015'
+release = '0.9.0-zh1-20261016'
 base = ROOT / 'dist/windows-installer'
 payload = base / 'payload'
 if payload.exists():
@@ -39,6 +39,7 @@ def extract(archive, destination, strip=False):
                 target.write_bytes(z.read(info))
 
 extract(product, payload)
+shutil.copytree(ROOT / 'samples/acceptance-0.9.0', payload / '测试用例')
 extract(args.jdk_zip, payload / 'jdk8', strip=True)
 ini = payload / 'ZenCode.ini'
 text = ini.read_text()

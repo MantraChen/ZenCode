@@ -1,0 +1,4 @@
+public class SqlString {
+    String sql = "SELECT na FROM example_items";
+    String plain = "not SQL";
+}

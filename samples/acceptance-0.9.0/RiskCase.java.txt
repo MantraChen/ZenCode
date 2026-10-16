@@ -1,0 +1,17 @@
+public class RiskCase {
+    public static String password = "demo-only";
+    public boolean login(String name) { return name == "admin"; }
+    public int sum(int[] values) {
+        int total = 0;
+        for (int i = 0; i <= values.length; i++) total += values[i];
+        return total;
+    }
+    public int parse(String text) {
+        try { return Integer.parseInt(text); }
+        catch (Exception e) { }
+        finally { return 0; }
+    }
+    public String sql(String name) {
+        return "SELECT * FROM example_items WHERE name = '" + name + "'";
+    }
+}

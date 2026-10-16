@@ -71,3 +71,6 @@ docs/*
 # Product artwork is source material.
 !bundles/cn.zencode.ide/icons/
 !bundles/cn.zencode.ide/icons/*
+
+__pycache__/
+*.pyc

@@ -1,0 +1,8 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: ZenCode Web Wizard Chinese 1
+Bundle-SymbolicName: cn.zencode.nls.web1
+Bundle-Version: 0.9.0.qualifier
+Fragment-Host: org.eclipse.jst.servlet.ui
+Bundle-RequiredExecutionEnvironment: JavaSE-1.8
+

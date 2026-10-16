@@ -18,7 +18,7 @@ public final class WebProjectCommand extends AbstractHandler {
         IWizardDescriptor descriptor = PlatformUI.getWorkbench().getNewWizardRegistry()
                 .findWizard("org.eclipse.jst.servlet.ui.project.facet.WebProjectWizard");
         if (descriptor == null) {
-            MessageDialog.openError(window.getShell(), "ERROR / Web 工程", "未找到 WTP Dynamic Web Project 向导。请检查完整产品组件；运行时不会下载组件。");
+            MessageDialog.openError(window.getShell(), "错误 / Web 工程", "未找到 WTP Dynamic Web Project 向导。请检查完整产品组件；运行时不会下载组件。");
             return null;
         }
         try {

@@ -28,15 +28,15 @@ public final class TomcatCheckCommand extends AbstractHandler {
                 String message;
                 boolean valid;
                 try { message = cn.zencode.assist.core.runtime.TomcatInstallation.inspect(home); valid = true; }
-                catch (Exception e) { message = "ERROR / 无法验证 Tomcat：" + e.getMessage(); valid = false; }
+                catch (Exception e) { message = "错误 / 无法验证 Tomcat：" + e.getMessage(); valid = false; }
                 final String result = message;
                 final boolean success = valid;
                 display.asyncExec(() -> {
                     if (shell.isDisposed()) return;
                     if (success) {
-                        MessageDialog.openInformation(window.getShell(), "Tomcat 本地检查", result + "\n\n下一步：打开 Servers 视图 → New / Server，选择对应 Apache Tomcat 版本和此目录，选择 JDK 8。\n在 Web 项目属性中选择 Targeted Runtimes；右键项目 → Run As / Run on Server。\n由 Servers 视图发布、启动、停止和调试；控制台保留原始服务器错误。此检查不代表启动或 Windows 兼容性验证。");
+                        MessageDialog.openInformation(window.getShell(), "Tomcat 本地检查", result + "\n\n下一步：打开服务器视图 → 新建 → 服务器，选择对应 Apache Tomcat 版本和此目录，选择 JDK 8。\n在 Web 项目属性中选择 目标运行环境；右键项目 → 运行方式 → 在服务器上运行。\n由服务器视图发布、启动、停止和调试；控制台保留原始服务器错误。此检查不代表启动或 Windows 兼容性验证。");
                         try { window.getActivePage().showView("org.eclipse.wst.server.ui.ServersView"); }
-                        catch (org.eclipse.ui.PartInitException e) { MessageDialog.openError(window.getShell(), "ERROR / Servers", e.getMessage()); }
+                        catch (org.eclipse.ui.PartInitException e) { MessageDialog.openError(window.getShell(), "错误 / 服务器", e.getMessage()); }
                     } else MessageDialog.openError(window.getShell(), "Tomcat 本地检查", result);
                 });
                 return org.eclipse.core.runtime.Status.OK_STATUS;
